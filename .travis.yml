@@ -1,0 +1,25 @@
+language: "perl"
+perl:
+  - "5.18"
+  - "5.16"
+  - "5.14"
+  - "5.12"
+  - "5.10"
+
+before_script:
+  - cpanm Pod::Readme
+  - cpanm Pod::Markdown
+  
+script:
+  - perl Makefile-Development.PL
+  - make all
+  - make disttest
+
+notifications:
+
+  recipients:
+    - zurborg@cpan.org
+
+  email:
+    on_success: change
+    on_failure: always

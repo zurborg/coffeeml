@@ -1,0 +1,11 @@
+#!/usr/bin/perl -w
+
+use Modern::Perl;
+use Data::Dumper;
+
+use CoffeeML;
+
+my $cml = CoffeeML->new;
+
+$cml->process(\*STDIN, \*STDOUT);
+
