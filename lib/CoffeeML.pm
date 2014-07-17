@@ -76,6 +76,12 @@ sub process {
 	$self->{builder}->build($struct, $out);
 }
 
+sub register_fastlane {
+	my ($self, $elements, $attr) = @_;
+	$elements = [ $elements ] unless ref $elements eq 'ARRAY';
+	$self->{parser}->{fastlane}->{$_} = $attr for @$elements;
+}
+
 =head1 AUTHOR
 
 David Zurborg, C<< <zurborg@cpan.org> >>

@@ -52,6 +52,28 @@ sub new {
 		opts => $options
 	};
 	
+	$self->{fastlane} = {};
+	{
+		local %_ = (
+			href     => [qw[ a base area link ]],
+			src      => [qw[ script frame iframe img ]],
+			name     => [qw[ meta input button map param select textarea ]],
+			cite     => [qw[ blockquote q ]],
+			clear    => [qw[ br ]],
+			profile  => [qw[ head ]],
+			lang     => [qw[ html ]],
+			for      => [qw[ label ]],
+			value    => [qw[ li option ]],
+			type     => [qw[ ol ul style ]],
+			label    => [qw[ optgroup ]],
+			align    => [qw[ caption div h1 h2 h3 h4 h5 h6 p ]],
+			action   => [qw[ form ]],
+		);
+		foreach my $attr (keys %_) {
+			$self->{fastlane}->{$_} = $attr for @{$_{$attr}};
+		}
+	}
+	
 	$self->{defaults} = {
 		style => {
 			type => 'text/css'
@@ -149,49 +171,11 @@ sub _elem {
 		}
 		if (exists $_{fastlane}) {
 			$_{fastlane} = substr $_{fastlane}, 1, -1;
-			given ($_{element}) {
-				when ([qw[ a base area link ]]) {
-					$_{attrs}->{href} = $_{fastlane};
-				}
-				when ([qw[ script frame iframe img ]]) {
-					$_{attrs}->{src} = $_{fastlane};
-				}
-				when ([qw[ meta input button map param select textarea ]]) {
-					$_{attrs}->{name} = $_{fastlane};
-				}
-				when ([qw[ blockquote q ]]) {
-					$_{attrs}->{cite} = $_{fastlane};
-				}
-				when ([qw[ br ]]) {
-					$_{attrs}->{clear} = $_{fastlane};
-				}
-				when ([qw[ head ]]) {
-					$_{attrs}->{profile} = $_{fastlane};
-				}
-				when ([qw[ html ]]) {
-					$_{attrs}->{lang} = $_{fastlane};
-				}
-				when ([qw[ label ]]) {
-					$_{attrs}->{for} = $_{fastlane};
-				}
-				when ([qw[ li option ]]) {
-					$_{attrs}->{value} = $_{fastlane};
-				}
-				when ([qw[ ol ul style ]]) {
-					$_{attrs}->{type} = $_{fastlane};
-				}
-				when ([qw[ optgroup ]]) {
-					$_{attrs}->{label} = $_{fastlane};
-				}
-				when ([qw[ caption div h1 h2 h3 h4 h5 h6 p ]]) {
-					$_{attrs}->{align} = $_{fastlane};
-				}
-				when ([qw[ form ]]) {
-					$_{attrs}->{action} = uc $_{fastlane};
-				}
-				default {
-					carp "fastlane info specified for '$_{element}'";
-				}
+			if (exists $self->{fastlane}->{$_{element}}) {
+				my $attr = $self->{fastlane}->{$_{element}};
+				$_{attrs}->{$attr} = $_{fastlane};
+			} else {
+				carp "fastlane info specified for '$_{element}'";
 			}
 		}
 		given ($_{element}) {
