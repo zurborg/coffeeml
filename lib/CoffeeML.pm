@@ -82,6 +82,10 @@ sub process {
 	$self->{builder}->build($struct, $out);
 }
 
+=head2 register_hook(name, coderef, regexp)
+
+=cut
+
 sub register_hook {
 	my ($self, $name, $fn, $re) = @_;
 	$self->{parser}->{hooks}->{$name} = {
@@ -90,11 +94,19 @@ sub register_hook {
 	$self->{parser}->{hooks}->{$name}->{re} = $re if defined $re;
 }
 
+=head2 register_fastlane(elemets, attribute)
+
+=cut
+
 sub register_fastlane {
 	my ($self, $elements, $attr) = @_;
 	$elements = [ $elements ] unless ref $elements eq 'ARRAY';
 	$self->{parser}->{fastlane}->{$_} = $attr for @$elements;
 }
+
+=head2 register_command(name, (parse => coderef, build => coderef))
+
+=cut
 
 sub register_command {
 	my ($self, $name, %fn) = @_;
