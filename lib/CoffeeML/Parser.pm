@@ -83,12 +83,6 @@ sub new {
 				$self->{assigns}->{$m->{name}} = $e->{attrs}->{id};
 			}
 		},
-		ignore => {
-			fn => sub {
-				my ($self, $e) = @_;
-				$e->{ignore} = 1;
-			}
-		},
 		coffee => {
 			fn => sub {
 				my ($self, $e) = @_;
@@ -279,6 +273,11 @@ sub _parseln {
 				local $_ = $1;
 				tr{<}{>};
 				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => length($stp) };
+			} elsif ($obj->{C} =~ m{^(#{3,})$}) {
+				my $stp = join('', @{$obj->{I}});
+				$obj->{comment} = 1;
+				local $_ = $1;
+				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => length($stp) };
 			}
 		}
 	}
@@ -299,6 +298,10 @@ sub _process {
 	my $items = (exists $struct->{E} ? delete $struct->{E} : undef);
 	if (exists $struct->{C} and defined $struct->{C}) {
 		if (not ref $struct->{C}) {
+			if ($struct->{C} =~ m{^#}) {
+				%$struct = ();
+				return;
+			}
 			my $re_hooks = $self->{re_hooks};
 			if ($struct->{C} =~ m/^
 (?:
@@ -342,7 +345,8 @@ $/xism) {
 				text => join (EOL, @{$struct->{C}}),
 				lineno => $struct->{L},
 				file => $self->{file},
-				indent => scalar @{$struct->{I}}
+				indent => scalar @{$struct->{I}},
+				(exists $struct->{comment} ? (comment => 1) : ()),
 			);
 		} else {
 			croak "unknown C";
