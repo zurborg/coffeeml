@@ -33,8 +33,6 @@ use constant EOL => "\n";
 my $re_html_element = qr{[a-z][a-z0-9]*}i;
 my $re_css_class = qr{[a-z][a-z0-9\-]*}i;
 my $re_css_id = qr{[a-z][a-z0-9\_]*}i;
-my $re_hook_assign = qr{assign\(([a-z0-9\._]+)\)};
-my $re_hooks = qr{($re_hook_assign|ignore|coffee)};
 
 =head1 METHODS
 
@@ -73,6 +71,31 @@ sub new {
 			$self->{fastlane}->{$_} = $attr for @{$_{$attr}};
 		}
 	}
+	
+	$self->{hooks} = {
+		assign => {
+			re => qr{assign\((?<name>[a-z0-9\._]+)\)},
+			fn => sub {
+				my ($self, $e, $m) = @_;
+				unless (exists $e->{attrs}->{id}) {
+					$e->{attrs}->{id} = $self->_nextid;
+				}
+				$self->{assigns}->{$m->{name}} = $e->{attrs}->{id};
+			}
+		},
+		ignore => {
+			fn => sub {
+				my ($self, $e) = @_;
+				$e->{ignore} = 1;
+			}
+		},
+		coffee => {
+			fn => sub {
+				my ($self, $e) = @_;
+				$e->{output_coffee} = 1;
+			}
+		}
+	};
 	
 	$self->{defaults} = {
 		style => {
@@ -150,21 +173,11 @@ sub _elem {
 			foreach my $hook (split /\s+/, delete $_{hooks}) {
 				next unless $hook =~ /\S/;
 				$hook =~ s{^\!}{};
-				given ($hook) {
-					when (m{^$re_hook_assign$}) {
-						unless (exists $_{attrs}->{id}) {
-							$_{attrs}->{id} = $self->_nextid;
-						}
-						$self->{assigns}->{$1} = $_{attrs}->{id};
-					}
-					when ('ignore') {
-						$_{ignore} = 1;
-					}
-					when ('coffee') {
-						$_{output_coffee} = 1;
-					}
-					default {
-						carp "cannot parse hook: $hook";
+				foreach my $hook_ (keys $self->{hooks}) {
+					if (exists $self->{hooks}->{$hook_}->{re} and $hook =~ $self->{hooks}->{$hook_}->{re}) {
+						$self->{hooks}->{$hook_}->{fn}->($self, \%_, {%+});
+					} elsif ($hook eq $hook_) {
+						$self->{hooks}->{$hook_}->{fn}->($self, \%_);
 					}
 				}
 			}
@@ -295,6 +308,7 @@ sub _process {
 	my $items = (exists $struct->{E} ? delete $struct->{E} : undef);
 	if (exists $struct->{C} and defined $struct->{C}) {
 		if (not ref $struct->{C}) {
+			my $re_hooks = $self->{re_hooks};
 			if ($struct->{C} =~ m/^
 (?:
 	(?<action>
@@ -373,6 +387,19 @@ sub parse {
 	$self->{anonymous_element_id} = $self->{opts}->{idoffset} || 0;
 	$self->{current} = [];
 	$self->{stack} = [ $self->{current} ];
+	
+	{
+		local @_ = ();
+		foreach my $hook (keys %{$self->{hooks}}) {
+			if (exists $self->{hooks}->{$hook}->{re}) {
+				push @_ => $self->{hooks}->{$hook}->{re};
+			} else {
+				push @_ => quotemeta $hook;
+			}
+		}
+		local $" = '|';
+		$self->{re_hooks} = qr{@_};
+	}
 
 	$in ||= *STDIN;
 	

@@ -76,6 +76,14 @@ sub process {
 	$self->{builder}->build($struct, $out);
 }
 
+sub register_hook {
+	my ($self, $name, $fn, $re) = @_;
+	$self->{parser}->{hooks}->{$name} = {
+		fn => $fn
+	};
+	$self->{parser}->{hooks}->{$name}->{re} = $re if defined $re;
+}
+
 sub register_fastlane {
 	my ($self, $elements, $attr) = @_;
 	$elements = [ $elements ] unless ref $elements eq 'ARRAY';
