@@ -76,7 +76,8 @@ sub _compile_coffeescript($$) {
 	return $out;
 }
 
-sub _indent($$) {
+sub _indent {
+	shift if ref $_[0];
 	my ($str, $pre) = @_;
 	return join(EOL, map { $pre.$_ } split /\n/, $str);
 }
@@ -140,120 +141,12 @@ sub _build($_) {
 				return;
 			}
 			if (exists $e->{command}) {
-				
-				given ($e->{command}) {
-					when ('textile') {
-						use Text::Textile qw(textile);
-						if (exists $e->{items}) {
-							$self->_outp(_indent(textile($self->_flatten(delete $e->{items})), ('  ' x ($e->{indent} + $self->{indentoffset}))).EOL);
-						} else {
-							$self->_error($e, "no content in textile");
-						}
-						return;
-					}
-					when ('include') {
-						my $file = $e->{args} || croak "command include: no arguments given, filename needed";
-						open my $fh, $file or croak "command inlcude: cannot open file $file: $!";
-						$self->_outp(('  ' x ($e->{indent} + $self->{indentoffset})).$_) for <$fh>;
-						close $fh;
-						if (exists $e->{items}) {
-							$self->_error($e, "discarding additional content (".$self->_flatten($e->{items}).")");
-						}
-						return;
-					}
-					when ('process') {
-						my $file = $e->{args} || $self->_error($e, "no arguments given, filename needed for command process");
-						$self->{indentoffset}++;
-						my $parser = CoffeeML::Parser->new({
-							idoffset => $self->{struct}->{anonymous_element_id},
-							indent => $e->{indent} + $self->{indentoffset}
-						});
-						$self->{indentoffset}--;
-						my $struct = $parser->parse($file);
-						$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
-						$self->_build($struct->{root});
-						if (exists $e->{items}) {
-							$self->_error($e, "discarding additional content");
-						}
-						return;
-					}
-					when ('wrapper') {
-						my $file = $e->{args} || $self->_error($e, "no arguments given, filename needed for command process");
-						unless (exists $e->{items}) {
-							$self->_error($e, "no content in wrapper");
-							return;
-						}
-						my $parser = CoffeeML::Parser->new({
-							idoffset => $self->{struct}->{anonymous_element_id},
-							indent => $e->{indent} + $self->{indentoffset}
-						});
-						my $struct = $parser->parse($file);
-						$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
-						push @{$self->{content}} => $e->{items};
-						$self->_build($struct->{root});
-						carp "wrapper file processed, but content not inserted" if scalar(@{$self->{content}}) > 0;
-						return;
-					}
-					when ('content') {
-						unless (@{$self->{content}}) {
-							$self->_error($e, "content requestet when no content available");
-							return;
-						}
-						$self->{indentoffset}++;
-						$self->_build(pop @{$self->{content}});
-						$self->{indentoffset}--;
-						return;
-					}
-					when ('raw') {
-						my $outp = $self->{outp};
-						my $ndnt = $self->{indentoffset};
-						$self->{indentoffset} = 0 - $e->{indent} - 1;
-						$self->{outp} = \'';
-						$self->_build(delete $e->{items});
-						my $result = ${ $self->{outp} };
-						$self->{outp} = $outp;
-						$result =~ s{&(?![a-z]+;)}{&amp;}g;
-						$result =~ s{<}{&lt;}g;
-						$result =~ s{>}{&gt;}g;
-						$self->_outp($result);
-						$self->{indentoffset} = $ndnt;
-						return;
-					}
-					when ('macro') {
-						unless ($e->{args} =~ m{^\s*([a-z]+)(?:\s*\(\s*(.+)\s*\))?\s*$}) {
-							carp "what?? ".$e->{args};
-							return;
-						}
-						my ($name, $args) = ($1, $2);
-						my @args = split /[\s,]+/ => $args;
-						$self->{macros}->{$name} = {
-							name => $name,
-							args => \@args,
-							items => $e->{items}
-						};
-						return;
-					}
-					when ('call') {
-						my $name = $e->{args};
-						unless (exists $self->{macros}->{$name}) {
-							carp "macro not found: $name";
-							return;
-						}
-						my $macro = $self->{macros}->{$name};
-						my $outp = $self->{outp};
-						$self->{outp} = \'';
-						$self->_build($macro->{items});
-						my $result = ${ $self->{outp} };
-						$self->{outp} = $outp;
-						$self->_outp($result);
-					}
-					default {
-						carp "unknwon command: $_";
-						return;
-					}
+				if (exists $self->{commands}->{$e->{command}}) {
+					return unless $self->{commands}->{$e->{command}}->($self, $e, $e->{args});
+				} else {
+					$self->_error($e, "unknwon command: ".$e->{command});
 				}
 			}
-					
 			if (exists $e->{element}) {
 				
 				$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
@@ -286,7 +179,7 @@ sub _build($_) {
 				if ($e->{element} ~~ $standalone_elems) {
 					$self->_outp(' />'.EOL);
 					if (exists $e->{items}) {
-						carp "discarding child elements" if defined $e->{items};
+						$self->_error($e, "discarding child elements");
 						delete $e->{items};
 					}
 					return;

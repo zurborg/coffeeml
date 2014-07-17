@@ -132,7 +132,6 @@ sub _elem {
 	$_{lineno} = $struct->{L};
 	$_{extra} = $struct->{X};
 	$_{file} = $self->{file};
-	#$_{items} = $struct->{E};
 	if (exists $_{action}) {
 		delete $_{action};
 		$_{element} = lc $_{element};
@@ -198,16 +197,8 @@ sub _elem {
 		}
 	} elsif (exists $_{special}) {
 		delete $_{special};
-		given ($_{command}) {
-			when ('coffee') {
-				if (exists $self->{stack}->[-2]) {
-					if (not exists $self->{stack}->[-2]->{attrs}->{id}) {
-						$self->{stack}->[-2]->{attrs}->{id} = $self->_nextid;
-					}
-					$self->{stack}->[-2]->{coffee} = [ $self->_flatten(delete $_{items}, $_{indent}) ];
-					$_{ignore} = 1;
-				}
-			}
+		if (exists $self->{commands}->{$_{command}}) {
+			$self->{commands}->{$_{command}}->($self, \%_, $_{args});
 		}
 	}
 	%$struct = %_;

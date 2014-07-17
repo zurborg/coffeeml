@@ -39,6 +39,10 @@ our $VERSION = '1.00';
 
 ...
 
+=cut
+
+use constant EOL => "\n";
+
 =head1 METHODS
 
 =head2 new
@@ -51,12 +55,14 @@ sub new {
 	$options{builder} ||= {}; 
 	my $parser = CoffeeML::Parser->new(delete $options{parser});
 	my $builder = CoffeeML::Builder->new(delete $options{builder});
+	
 	my $self = {
 		opts => \%options,
 		parser => $parser,
 		builder => $builder,
 	};
-	return bless $self => ref $class || $class;
+	$self = bless $self => ref $class || $class;
+	return $self->_init;
 }
 
 =head2 process($in, $out, %options)
@@ -88,6 +94,128 @@ sub register_fastlane {
 	my ($self, $elements, $attr) = @_;
 	$elements = [ $elements ] unless ref $elements eq 'ARRAY';
 	$self->{parser}->{fastlane}->{$_} = $attr for @$elements;
+}
+
+sub register_command {
+	my ($self, $name, %fn) = @_;
+	$self->{parser}->{commands}->{$name} = $fn{parse} if exists $fn{parse};
+	$self->{builder}->{commands}->{$name} = $fn{build} if exists $fn{build};
+}
+
+sub _init {
+	my $self = shift;
+
+	$self->register_command('coffee',	
+		parse => sub {
+			my ($self, $e, $args) = @_;
+			if (exists $self->{stack}->[-2]) {
+				if (not exists $self->{stack}->[-2]->{attrs}->{id}) {
+					$self->{stack}->[-2]->{attrs}->{id} = $self->_nextid;
+				}
+				$self->{stack}->[-2]->{coffee} = [ $self->_flatten(delete $e->{items}, $e->{indent}) ];
+				$e->{ignore} = 1;
+			}
+		},
+		build => sub {
+			#...
+		}
+	);
+	$self->register_command('textile',
+		build => sub {
+			my ($self, $e, $args) = @_;
+			use Text::Textile qw(textile);
+			if (exists $e->{items}) {
+				$self->_outp($self->_indent(textile($self->_flatten(delete $e->{items})), ('  ' x ($e->{indent} + $self->{indentoffset}))).EOL);
+			} else {
+				$self->_error($e, "no content in textile");
+			}
+			return;
+		}
+	);
+	$self->register_command('include',
+		build => sub {
+			my ($self, $e, $file) = @_;
+			$file || croak "command include: no arguments given, filename needed";
+			open my $fh, $file or croak "command inlcude: cannot open file $file: $!";
+			$self->_outp(('  ' x ($e->{indent} + $self->{indentoffset})).$_) for <$fh>;
+			close $fh;
+			if (exists $e->{items}) {
+				$self->_error($e, "discarding additional content (".$self->_flatten($e->{items}).")");
+			}
+			return;
+		}
+	);
+	$self->register_command('process',
+		build => sub {
+			my ($self, $e, $file) = @_;
+			$file || $self->_error($e, "no arguments given, filename needed for command process");
+			$self->{indentoffset}++;
+			my $parser = CoffeeML::Parser->new({
+				idoffset => $self->{struct}->{anonymous_element_id},
+				indent => $e->{indent} + $self->{indentoffset}
+			});
+			$self->{indentoffset}--;
+			my $struct = $parser->parse($file);
+			$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
+			$self->_build($struct->{root});
+			if (exists $e->{items}) {
+				$self->_error($e, "discarding additional content");
+			}
+			return;
+		}
+	);
+	$self->register_command('wrapper',
+		build => sub {
+			my ($self, $e, $file) = @_;
+			$file || $self->_error($e, "no arguments given, filename needed for command process");
+			unless (exists $e->{items}) {
+				$self->_error($e, "no content in wrapper");
+				return;
+			}
+			my $parser = CoffeeML::Parser->new({
+				idoffset => $self->{struct}->{anonymous_element_id},
+				indent => $e->{indent} + $self->{indentoffset}
+			});
+			my $struct = $parser->parse($file);
+			$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
+			push @{$self->{content}} => $e->{items};
+			$self->_build($struct->{root});
+			carp "wrapper file processed, but content not inserted" if scalar(@{$self->{content}}) > 0;
+			return;
+		}
+	);
+	$self->register_command('content',
+		build => sub {
+			my ($self, $e, $args) = @_;
+			unless (@{$self->{content}}) {
+				$self->_error($e, "content requestet when no content available");
+				return;
+			}
+			$self->{indentoffset}++;
+			$self->_build(pop @{$self->{content}});
+			$self->{indentoffset}--;
+			return;
+		}
+	);
+	$self->register_command('raw',
+		build => sub {
+			my ($self, $e, $args) = @_;
+			my $outp = $self->{outp};
+			my $ndnt = $self->{indentoffset};
+			$self->{indentoffset} = 0 - $e->{indent} - 1;
+			$self->{outp} = \'';
+			$self->_build(delete $e->{items});
+			my $result = ${ $self->{outp} };
+			$self->{outp} = $outp;
+			$result =~ s{&(?![a-z]+;)}{&amp;}g;
+			$result =~ s{<}{&lt;}g;
+			$result =~ s{>}{&gt;}g;
+			$self->_outp($result);
+			$self->{indentoffset} = $ndnt;
+			return;
+		}
+	);
+	return $self;
 }
 
 =head1 AUTHOR
