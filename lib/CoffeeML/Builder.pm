@@ -49,6 +49,16 @@ sub new {
 	return bless $self => ref $class || $class;
 }
 
+sub _dump_without_items {
+	use Data::Dumper;
+	use Clone qw(clone);
+	
+	my $e = clone(shift);
+	$e->{items} = scalar @{$e->{items}} if exists $e->{items} and defined $e->{items};
+	$e->{E} = scalar @{$e->{E}} if exists $e->{E} and defined $e->{E};
+	say STDERR Dumper($e);
+}
+
 
 sub _build($_);
 
@@ -84,24 +94,35 @@ sub _outp($_) {
 	}
 }
 
-sub _prepare_for_textile {
+sub _flatten {
 	my ($self, $e) = @_;
 	given (ref $e) {
 		when ('HASH') {
 			if (exists $e->{items}) {
-				return $self->_prepare_for_textile($e->{items});
-			} elsif (exists $e->{line}) {
-				return $e->{line};
+				return $self->_flatten($e->{items});
+			} elsif (exists $e->{text}) {
+				return $e->{text};
 			}
 		}
 		when ('ARRAY') {
-			return join EOL, map { $self->_prepare_for_textile($_) } @$e;
+			return join EOL, map { $self->_flatten($_) } @$e;
 		}
 		default {
 			if (defined $e) {
 				return $e;
 			}
 		}
+	}
+}
+
+sub _error {
+	my ($self, $e, $msg) = @_;
+	if (exists $e->{lineno}) {
+		warn "error: $msg at ".$e->{file}." line ".$e->{lineno}.EOL;
+	} else {
+		local @_ = caller(0);
+		local $" = ', ';
+		die "error: $msg (catched at $_[0] line $_[2])".EOL;
 	}
 }
 
@@ -112,168 +133,209 @@ sub _build($_) {
 			$self->_build($_) foreach @$e;
 		}
 		when ('HASH') {
+			unless (keys %$e) {
+				return;
+			}
 			if (exists $e->{ignore}) {
 				return;
 			}
-			if (exists $e->{action}) {
+			if (exists $e->{command}) {
 				
-				if (exists $e->{command}) {
-					
-					given ($e->{command}) {
-						when ('textile') {
-							use Text::Textile qw(textile);
-							$self->_outp(_indent(textile($self->_prepare_for_textile($e->{items})), ('  ' x ($e->{indent} + $self->{indentoffset}))).EOL);
-						}
-						when ('include') {
-							my $file = $e->{args} || croak "command include: no arguments given, filename needed";
-							open my $fh, $file or croak "command inlcude: cannot open file $file: $!";
-							$self->_outp(('  ' x ($e->{indent} + $self->{indentoffset})).$_) for <$fh>;
-							close $fh;
-						}
-						when ('process') {
-							my $file = $e->{args} || croak "command include: no arguments given, filename needed";
-							$self->{indentoffset}++;
-							my $parser = CoffeeML::Parser->new({
-								idoffset => $self->{struct}->{anonymous_element_id},
-								indent => $e->{indent} + $self->{indentoffset}
-							});
-							$self->{indentoffset}--;
-							my $struct = $parser->parse($file);
-							$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
-							$self->_build($struct->{root});
-						}
-						when ('wrapper') {
-							my $file = $e->{args} || croak "command include: no arguments given, filename needed";
-							$self->{indentoffset}++;
-							my $parser = CoffeeML::Parser->new({
-								idoffset => $self->{struct}->{anonymous_element_id},
-								indent => $e->{indent} + $self->{indentoffset}
-							});
-							$self->{indentoffset}--;
-							my $struct = $parser->parse($file);
-							$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
-							push @{$self->{content}} => $e->{items};
-							$self->_build($struct->{root});
-							carp "wrapper file processed, but content not inserted" if scalar(@{$self->{content}}) > 0;
-						}
-						when ('content') {
-							$self->_build(pop @{$self->{content}});
-						}
-						when ('raw') {
-							my $outp = $self->{outp};
-							my $ndnt = $self->{indentoffset};
-							$self->{indentoffset} = 0 - $e->{indent} - 1;
-							$self->{outp} = \'';
-							$self->_build($e->{items});
-							my $result = ${ $self->{outp} };
-							$self->{outp} = $outp;
-							$result =~ s{&(?![a-z]+;)}{&amp;}g;
-							$result =~ s{<}{&lt;}g;
-							$result =~ s{>}{&gt;}g;
-							$self->_outp($result);
-							$self->{indentoffset} = $ndnt;
-						}
-						when ('macro') {
-							unless ($e->{args} =~ m{^\s*([a-z]+)(?:\s*\(\s*(.+)\s*\))?\s*$}) {
-								carp "what?? ".$e->{args};
-								return;
-							}
-							my ($name, $args) = ($1, $2);
-							my @args = split /[\s,]+/ => $args;
-							$self->{macros}->{$name} = {
-								name => $name,
-								args => \@args,
-								items => $e->{items}
-							};
-							return;
-						}
-						when ('call') {
-							my $name = $e->{args};
-							unless (exists $self->{macros}->{$name}) {
-								carp "macro not found: $name";
-								return;
-							}
-							my $macro = $self->{macros}->{$name};
-							my $outp = $self->{outp};
-							$self->{outp} = \'';
-							$self->_build($macro->{items});
-							my $result = ${ $self->{outp} };
-							$self->{outp} = $outp;
-							$self->_outp($result);
-						}
-						default {
-							carp "unknwon command: $_";
-							return;
-						}
-					}
-					
-				} elsif (exists $e->{element}) {
-					
-					$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
-					
-					$self->_outp('<'.$e->{element});
-					
-					given ($e->{element}) {
-						when ([qw[ input ]]) {
-							$e->{attrs}->{value} = delete $e->{rest} if exists $e->{rest};
-						}
-						when ([qw[ meta ]]) {
-							$e->{attrs}->{content} = delete $e->{rest} if exists $e->{rest};
-						}
-						when ([qw[ area ]]) {
-							$e->{attrs}->{alt} = $e->{attrs}->{title} = delete $e->{rest} if exists $e->{rest};
-						}
-					}
-					
-					foreach my $attr (keys %{$e->{attrs}}) {
-						$self->_outp(' '.$attr.'="'.$e->{attrs}->{$attr}.'"');
-					}
-					
-					if ($e->{element} ~~ $standalone_elems) {
-						$self->_outp(' />'.EOL);
+				given ($e->{command}) {
+					when ('textile') {
+						use Text::Textile qw(textile);
 						if (exists $e->{items}) {
-							carp "discarding child elements";
-							delete $e->{items};
+							$self->_outp(_indent(textile($self->_flatten(delete $e->{items})), ('  ' x ($e->{indent} + $self->{indentoffset}))).EOL);
+						} else {
+							$self->_error($e, "no content in textile");
 						}
 						return;
 					}
-					
-					if ($e->{element} eq 'script' and exists $e->{output_coffee}) {
-						$self->{indentoffset}++;
-						$e->{items} = [{indent => 0, line => '' }, { indent => $e->{indent} + $self->{indentoffset}, line => $self->_javascript }];
-						$self->{indentoffset}--;
-					}
-					
-					if (exists $e->{items}) {
-						if (scalar(@{$e->{items}}) == 1 and ref $e->{items}->[0] eq 'HASH' and not exists $e->{items}->[0]->{action}) {
-							$self->_outp('>'.$e->{items}->[0]->{line}.'</'.$e->{element}.'>'.EOL);
-						} elsif ($e->{element} eq 'pre') {
-							$self->_outp('>');
-							$self->_build($e->{items});
-							$self->_outp('</'.$e->{element}.'>'.EOL);
-						} else {
-							$self->_outp('>'.EOL);
-							$self->_build($e->{items});
-							$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
-							$self->_outp('</'.$e->{element}.'>'.EOL);
+					when ('include') {
+						my $file = $e->{args} || croak "command include: no arguments given, filename needed";
+						open my $fh, $file or croak "command inlcude: cannot open file $file: $!";
+						$self->_outp(('  ' x ($e->{indent} + $self->{indentoffset})).$_) for <$fh>;
+						close $fh;
+						if (exists $e->{items}) {
+							$self->_error($e, "discarding additional content (".$self->_flatten($e->{items}).")");
 						}
-					} elsif (exists $e->{rest} and defined $e->{rest} and $e->{rest} =~ /\S/) {
-						$self->_outp('>'.$e->{rest}.'</'.$e->{element}.'>'.EOL);
-					} else {
-						$self->_outp('></'.$e->{element}.'>'.EOL);
+						return;
 					}
-				} elsif (exists $e->{coffeeblock}) {
-					# ignore
-				} else {
-					use Data::Dumper;
-					say STDERR Dumper($e);
-					croak "meh";
+					when ('process') {
+						my $file = $e->{args} || $self->_error($e, "no arguments given, filename needed for command process");
+						$self->{indentoffset}++;
+						my $parser = CoffeeML::Parser->new({
+							idoffset => $self->{struct}->{anonymous_element_id},
+							indent => $e->{indent} + $self->{indentoffset}
+						});
+						$self->{indentoffset}--;
+						my $struct = $parser->parse($file);
+						$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
+						$self->_build($struct->{root});
+						if (exists $e->{items}) {
+							$self->_error($e, "discarding additional content");
+						}
+						return;
+					}
+					when ('wrapper') {
+						my $file = $e->{args} || $self->_error($e, "no arguments given, filename needed for command process");
+						unless (exists $e->{items}) {
+							$self->_error($e, "no content in wrapper");
+							return;
+						}
+						my $parser = CoffeeML::Parser->new({
+							idoffset => $self->{struct}->{anonymous_element_id},
+							indent => $e->{indent} + $self->{indentoffset}
+						});
+						my $struct = $parser->parse($file);
+						$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
+						push @{$self->{content}} => $e->{items};
+						$self->_build($struct->{root});
+						carp "wrapper file processed, but content not inserted" if scalar(@{$self->{content}}) > 0;
+						return;
+					}
+					when ('content') {
+						unless (@{$self->{content}}) {
+							$self->_error($e, "content requestet when no content available");
+							return;
+						}
+						$self->{indentoffset}++;
+						$self->_build(pop @{$self->{content}});
+						$self->{indentoffset}--;
+						return;
+					}
+					when ('raw') {
+						my $outp = $self->{outp};
+						my $ndnt = $self->{indentoffset};
+						$self->{indentoffset} = 0 - $e->{indent} - 1;
+						$self->{outp} = \'';
+						$self->_build(delete $e->{items});
+						my $result = ${ $self->{outp} };
+						$self->{outp} = $outp;
+						$result =~ s{&(?![a-z]+;)}{&amp;}g;
+						$result =~ s{<}{&lt;}g;
+						$result =~ s{>}{&gt;}g;
+						$self->_outp($result);
+						$self->{indentoffset} = $ndnt;
+						return;
+					}
+					when ('macro') {
+						unless ($e->{args} =~ m{^\s*([a-z]+)(?:\s*\(\s*(.+)\s*\))?\s*$}) {
+							carp "what?? ".$e->{args};
+							return;
+						}
+						my ($name, $args) = ($1, $2);
+						my @args = split /[\s,]+/ => $args;
+						$self->{macros}->{$name} = {
+							name => $name,
+							args => \@args,
+							items => $e->{items}
+						};
+						return;
+					}
+					when ('call') {
+						my $name = $e->{args};
+						unless (exists $self->{macros}->{$name}) {
+							carp "macro not found: $name";
+							return;
+						}
+						my $macro = $self->{macros}->{$name};
+						my $outp = $self->{outp};
+						$self->{outp} = \'';
+						$self->_build($macro->{items});
+						my $result = ${ $self->{outp} };
+						$self->{outp} = $outp;
+						$self->_outp($result);
+					}
+					default {
+						carp "unknwon command: $_";
+						return;
+					}
+				}
+			}
+					
+			if (exists $e->{element}) {
+				
+				$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
+				
+				$self->_outp('<'.$e->{element});
+				
+				given ($e->{element}) {
+					when ([qw[ input ]]) {
+						$e->{attrs}->{value} = delete $e->{rest} if exists $e->{rest};
+					}
+					when ([qw[ meta ]]) {
+						$e->{attrs}->{content} = delete $e->{rest} if exists $e->{rest};
+					}
+					when ([qw[ area ]]) {
+						$e->{attrs}->{alt} = $e->{attrs}->{title} = delete $e->{rest} if exists $e->{rest};
+					}
+					when ([qw[ script ]]) {
+						if (exists $e->{output_coffee}) {
+							$self->{indentoffset}++;
+							$e->{items} = [{indent => 0, line => '' }, { indent => $e->{indent} + $self->{indentoffset}, line => $self->_javascript }];
+							$self->{indentoffset}--;
+						}
+					}
 				}
 				
+				foreach my $attr (keys %{$e->{attrs}}) {
+					$self->_outp(' '.$attr.'="'.$e->{attrs}->{$attr}.'"');
+				}
+				
+				if ($e->{element} ~~ $standalone_elems) {
+					$self->_outp(' />'.EOL);
+					if (exists $e->{items}) {
+						carp "discarding child elements" if defined $e->{items};
+						delete $e->{items};
+					}
+					return;
+				}
+				
+				if (exists $e->{items} and defined $e->{items}) {
+					if (scalar(@{$e->{items}}) == 1 and ref $e->{items}->[0] eq 'HASH' and not exists $e->{items}->[0]->{command} and not exists $e->{items}->[0]->{element}) {
+						$self->_outp('>'.$e->{items}->[0]->{text}.'</'.$e->{element}.'>'.EOL);
+					} elsif ($e->{element} eq 'pre') {
+						$self->_outp('>');
+						$self->_build($e->{items});
+						$self->_outp('</'.$e->{element}.'>'.EOL);
+					} else {
+						$self->_outp('>'.EOL);
+						$self->_build($e->{items});
+						$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
+						$self->_outp('</'.$e->{element}.'>'.EOL);
+					}
+				} elsif (exists $e->{rest} and defined $e->{rest} and $e->{rest} =~ /\S/) {
+					$self->_outp('>'.$e->{rest}.'</'.$e->{element}.'>'.EOL);
+				} elsif (exists $e->{text} and defined $e->{text}) {
+					if (ref $e->{text} eq 'ARRAY') {
+						$self->_outp('>'.EOL);
+						my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
+						$self->_outp(_indent(join(EOL, @{$e->{text}}), $indent.'  ').EOL);
+						$self->_outp($indent.'</'.$e->{element}.'>'.EOL);
+					} else {
+						$self->_outp('>'.$e->{text}.'</'.$e->{text}.'>'.EOL);
+					}
+				} else {
+					$self->_outp('></'.$e->{element}.'>'.EOL);
+				}
+			} elsif (exists $e->{coffeeblock}) {
+				# ignore
 			} elsif (exists $e->{indent}) {
 				$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
-				$self->_outp($e->{line}.EOL);
+				#_dump_without_items($e);
+				if (exists $e->{text}) {
+					$self->_outp($e->{text});
+				} elsif (exists $e->{rest}) {
+					$self->_outp($e->{rest});
+				}
+				$self->_outp(EOL);
 				$self->_build($e->{items}) if exists $e->{items};
+			} elsif (exists $e->{items}) {
+				$self->_build($e->{items});
+			} else {
+				_dump_without_items($e);
+				$self->_error($e, "meh");
 			}
 			
 			if (exists $e->{coffee}) {
@@ -297,6 +359,8 @@ sub _build($_) {
 
 sub _javascript {
 	my ($self) = @_;
+	
+	return '';
 	
 	my $JS = '';
 	

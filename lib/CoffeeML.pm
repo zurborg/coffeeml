@@ -69,9 +69,9 @@ sub process {
 	my $struct = $self->{parser}->parse($in);
 	if (0) {
 		use Data::Dumper;
-		say '#' x 80;
-		say Dumper($struct->{level}->[0]);
-		say '#' x 80;
+		say STDERR '#' x 80;
+		say STDERR Dumper($struct->{root});
+		say STDERR '#' x 80;
 	}
 	$self->{builder}->build($struct, $out);
 }

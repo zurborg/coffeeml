@@ -2,6 +2,7 @@ package CoffeeML::Parser;
 
 use Modern::Perl;
 use Carp;
+use Clone qw(clone);
 
 =head1 NAME
 
@@ -69,12 +70,27 @@ sub _nextid {
 	return 'anonymous_element_'.$self->{anonymous_element_id}++;
 }
 
-sub _elem($%) {
-	my $self = shift;
-	local %_ = @_;
-	$_{indent} = scalar @{$self->{indent}};
+sub _flatten {
+	my ($self, $struct, $indent_offset) = @_;
+	if (ref $struct eq 'ARRAY') {
+		return map { $self->_flatten($_, $indent_offset) } @$struct;
+	}
+	pop @{$struct->{I}} for 0..$indent_offset;
+	return unless defined $struct->{C};
+	return join('' => @{$struct->{I}}).$struct->{C}, (exists $struct->{E} ? $self->_flatten($struct->{E}, $indent_offset) : ());
+}
+
+sub _elem {
+	my ($self, $capture, $struct) = @_;
+	local %_ = %$capture;
+	$_{indent} = scalar @{$struct->{I}};
+	$_{lineno} = $struct->{L};
+	$_{extra} = $struct->{X};
+	$_{file} = $self->{file};
+	#$_{items} = $struct->{E};
 	if (exists $_{action}) {
-		$_{element} = lc $_{element} if exists $_{element};
+		delete $_{action};
+		$_{element} = lc $_{element};
 		if (exists $_{attrs}) {
 			$_{attrs} = substr $_{attrs}, 1, -1;
 			$_{attrs} = { map { /=/ ? ( split /=/, $_, 2 ) : ( $_ => $_ )} grep length, split /
@@ -85,14 +101,14 @@ sub _elem($%) {
 		} else {
 			$_{attrs} = {};
 		}
-		if (exists $_{element} and exists $self->{defaults}->{$_{element}}) {
+		if (exists $self->{defaults}->{$_{element}}) {
 			$_{attrs} = { %{$self->{defaults}->{$_{element}}}, %{$_{attrs}} };
 		}
 		if (exists $_{classes}) {
-			$_{attrs}->{class} = join ' ' => grep length, split /\./, $_{classes};
+			$_{attrs}->{class} = join ' ' => grep length, split /\./, delete $_{classes};
 		}
 		if (exists $_{id}) {
-			$_{attrs}->{id} = substr $_{id}, 1;
+			$_{attrs}->{id} = substr delete $_{id}, 1;
 		}
 		if (exists $_{coffee}) {
 			$_{coffee} = delete $_{rest};
@@ -109,215 +125,255 @@ sub _elem($%) {
 			
 		}
 		if (exists $_{hooks}) {
-			foreach my $hook (split /\s+/, $_{hooks}) {
+			foreach my $hook (split /\s+/, delete $_{hooks}) {
 				next unless $hook =~ /\S/;
 				$hook =~ s{^\!}{};
-				if ($hook =~ m{^$re_hook_assign$}) {
-					unless (exists $_{attrs}->{id}) {
-						$_{attrs}->{id} = $self->_nextid;
+				given ($hook) {
+					when (m{^$re_hook_assign$}) {
+						unless (exists $_{attrs}->{id}) {
+							$_{attrs}->{id} = $self->_nextid;
+						}
+						$self->{assigns}->{$1} = $_{attrs}->{id};
 					}
-					$self->{assigns}->{$1} = $_{attrs}->{id};
-				} elsif ($hook eq 'ignore') {
-					$_{ignore} = 1;
-				} elsif ($hook eq 'coffee') {
-					$_{output_coffee} = 1;
-				} else {
-					carp "cannot parse hook: $hook";
+					when ('ignore') {
+						$_{ignore} = 1;
+					}
+					when ('coffee') {
+						$_{output_coffee} = 1;
+					}
+					default {
+						carp "cannot parse hook: $hook";
+					}
 				}
 			}
 		}
-		if (exists $_{special}) {
-			$_{special} = substr $_{special}, 1, -1;
+		if (exists $_{fastlane}) {
+			$_{fastlane} = substr $_{fastlane}, 1, -1;
 			given ($_{element}) {
 				when ([qw[ a base area link ]]) {
-					$_{attrs}->{href} = $_{special};
+					$_{attrs}->{href} = $_{fastlane};
 				}
 				when ([qw[ script frame iframe img ]]) {
-					$_{attrs}->{src} = $_{special};
+					$_{attrs}->{src} = $_{fastlane};
 				}
 				when ([qw[ meta input button map param select textarea ]]) {
-					$_{attrs}->{name} = $_{special};
+					$_{attrs}->{name} = $_{fastlane};
 				}
 				when ([qw[ blockquote q ]]) {
-					$_{attrs}->{cite} = $_{special};
+					$_{attrs}->{cite} = $_{fastlane};
 				}
 				when ([qw[ br ]]) {
-					$_{attrs}->{clear} = $_{special};
+					$_{attrs}->{clear} = $_{fastlane};
 				}
 				when ([qw[ head ]]) {
-					$_{attrs}->{profile} = $_{special};
+					$_{attrs}->{profile} = $_{fastlane};
 				}
 				when ([qw[ html ]]) {
-					$_{attrs}->{lang} = $_{special};
+					$_{attrs}->{lang} = $_{fastlane};
 				}
 				when ([qw[ label ]]) {
-					$_{attrs}->{for} = $_{special};
+					$_{attrs}->{for} = $_{fastlane};
 				}
 				when ([qw[ li option ]]) {
-					$_{attrs}->{value} = $_{special};
+					$_{attrs}->{value} = $_{fastlane};
 				}
 				when ([qw[ ol ul style ]]) {
-					$_{attrs}->{type} = $_{special};
+					$_{attrs}->{type} = $_{fastlane};
 				}
 				when ([qw[ optgroup ]]) {
-					$_{attrs}->{label} = $_{special};
+					$_{attrs}->{label} = $_{fastlane};
 				}
 				when ([qw[ caption div h1 h2 h3 h4 h5 h6 p ]]) {
-					$_{attrs}->{align} = $_{special};
+					$_{attrs}->{align} = $_{fastlane};
 				}
 				when ([qw[ form ]]) {
-					$_{attrs}->{action} = uc $_{special};
+					$_{attrs}->{action} = uc $_{fastlane};
 				}
 				default {
-					carp "special info specified for '$_{element}'";
+					carp "fastlane info specified for '$_{element}'";
 				}
 			}
 		}
-		if (exists $_{command} and $_{command} eq 'coffee') {
-			$self->{capture_js_block} = 1;
-			$_{coffee} = [ '# start coffeeblock' ];
-			
-			my $x;
-			unless (exists $self->{struct}->[-1]) {
-				if (exists $self->{level}->[-2]) {
-					$x = $self->{level}->[-2]->[-1];
-				} else {
-					carp "JS at root";
-				}
-			} elsif ($_{indent} - $self->{struct}->[-1]->{indent} <= 1) {
-				$x = $self->{struct}->[-1];
-			} else {
-				$x = $self->{struct}->[-1]->{items}->[-1];
+		given ($_{element}) {
+			when ([qw[ style ]]) {
+				$_{text} = [ $self->_flatten(delete $_{items}, $_{indent}) ];
 			}
-			
-			unless (defined $x and exists $x->{attrs}->{id}) {
-				$x->{attrs}->{id} = $self->_nextid;
+		}
+	} elsif (exists $_{special}) {
+		delete $_{special};
+		given ($_{command}) {
+			when ('coffee') {
+				if (exists $self->{stack}->[-2]) {
+					if (not exists $self->{stack}->[-2]->{attrs}->{id}) {
+						$self->{stack}->[-2]->{attrs}->{id} = $self->_nextid;
+					}
+					$self->{stack}->[-2]->{coffee} = [ $self->_flatten(delete $_{items}, $_{indent}) ];
+					$_{ignore} = 1;
+				}
+			}
+		}
+	}
+	%$struct = %_;
+}
+
+sub _parseti {
+	my ($self, $line) = @_;
+	my @indent = @{$self->{indent}};
+	local $" = '';
+	my $obj = { L => $., C => undef, I => [ @indent ] };
+	if ($line =~ m{^@indent(\S.*)$}) {
+		$obj->{C} = $1;
+		push @{$self->{current}} => $obj;
+	} elsif ($line =~ m{^@indent(\s+)(\S.*)$}) {
+		push @{$self->{indent}} => $1;
+		$obj->{C} = $2;
+		push @{$obj->{I}} => $1;
+		my $n = [ $obj ];
+		$self->{current}->[-1]->{E} = $n;
+		push @{$self->{stack}} => $self->{current};
+		$self->{current} = $n;
+	} elsif ($line =~ m{^(\s*)(\S.*)$}) {
+		my $indent = $1;
+		$obj->{C} = $2;
+		my $i = 0;
+		my $ok;
+		unless (length $1) { # back to the roots
+			$i = @indent;
+			$ok = 1;
+		} else {
+			$ok = 0;
+			while (pop @indent) {
+				$i++;
+				local $" = '';
+				if ($indent eq "@indent") {
+					$ok = 1;
+					last;
+				}
+			}
+		}
+		if ($ok) {
+			pop @{$self->{indent}} for 1..$i;
+			$self->{current} = pop @{$self->{stack}} for 1..$i;
+			$obj->{I} = clone($self->{indent});
+			push @{$self->{current}} => $obj;
+		} else {
+			croak "indentation error";
+		}
+	} else {
+		# discard empty lines
+	}
+	return $obj;
+}
+
+sub _parseln {
+	my ($self, $line) = @_;
+	chomp $line;
+	if (exists $self->{raw}) {
+		if ($line eq $self->{raw}->{stp}) {
+			$self->{raw}->{obj}->{C} = $self->{raw}->{cnt};
+			delete $self->{raw};
+		} else {
+			if (length $line > $self->{raw}->{dnt}) {
+				push @{$self->{raw}->{cnt}} => substr($line, $self->{raw}->{dnt});
+			} else {
+				push @{$self->{raw}->{cnt}} => '';
 			}
 		}
 	} else {
-		$_{line} =~ s{^\\}{};
+		my $obj = $self->_parseti($line);
+		if (defined $obj->{C}) {
+			if ($obj->{C} =~ m{^("{3,})$}) {
+				my $stp = join('', @{$obj->{I}});
+				local $_ = $1;
+				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => 0 };
+			} elsif ($obj->{C} =~ m{^(<{3,})$}) {
+				my $stp = join('', @{$obj->{I}});
+				local $_ = $1;
+				tr{<}{>};
+				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => length($stp) };
+			}
+		}
 	}
-	return \%_;
 }
 
-sub _parseln($_) {
-	my ($self, $line) = @_;
-	chomp $line;
-	my @indent = @{$self->{indent}};
-	$" = '';
-	if ($self->{capture_raw_block}) {
-		if ($line =~ m{^@indent"""$}) {
-			my $rawdata = join EOL, @{$self->{struct}};
-			$self->{struct} = pop @{$self->{level}};
-			push @{$self->{struct}} => { indent => scalar(@indent), line => $rawdata } if $self->{capture_raw_block} < 2;
-			$self->{capture_raw_block} = 0;
-			pop @{$self->{indent}};
-			return;
-		} else {
-#			say ">$line";
-			push @{$self->{struct}} => $line;
-			return;
-		}
-	} elsif ($line =~ m{^\s*$}) {
-		push @{$self->{struct}} => undef unless exists $self->{struct}->[-1]->{action};
+sub _process {
+	my ($self, $struct) = @_;
+	push @{$self->{stack}} => $struct;
+	if(0){
+		use Data::Dumper;
+		say Dumper($struct);
+	}
+	if (ref $struct eq 'ARRAY') {
+		$self->_process($_) for @$struct;
+		pop @{$self->{stack}};
 		return;
-	} elsif ($self->{capture_js_block} and $line =~ m{^@indent}) {
-		if ($self->{capture_js_block} == 2 and $line =~ m{^@indent(.+)$}) {
-#			say "%$line";
-			push @{$self->{struct}} => $1;
-			return;
-		} elsif ($self->{capture_js_block} == 1 and $line =~ m{^@indent(\s+)(.+)$}) {
-#			say "%$line";
-			push @{$self->{indent}} => $1;
-			my $n = $self->{struct}->[-1]->{coffee} = [ $2 ];
-			push @{$self->{level}} => $self->{struct};
-			$self->{struct} = $n;
-			$self->{capture_js_block} = 2;
-			return;
-		} else {
-			carp "capture js: step $self->{capture_js_block} and line={{$line}} - bad";
-			carp "                indentation: |@indent|";
-		}
-	} elsif ($line =~ m/^
-(?<indent> \s* )
-(?<line>
+	}
+	my $items = (exists $struct->{E} ? delete $struct->{E} : undef);
+	if (exists $struct->{C} and defined $struct->{C}) {
+		if (not ref $struct->{C}) {
+			if ($struct->{C} =~ m/^
+(?:
 	(?<action>
-		(?:
-			%
-			(?<element> $re_html_element )
-			(?<special> \( .*? \) )?
-			(?<classes> ( \. $re_css_class )+ )?
-			(?<id> \# $re_css_id )?
-			(?<attrs> \{ [^\}]* \} )?
-			(?<data> ( \s+ & [^=]+ = \S+ )+ )?
-			(?<hooks>
-				(?: \s+ ! $re_hooks )+
-			)?
-			(?<coffee> \s+ -> \s+ )?
-			\s*
-			(?<rest> .*)?
-		)
-			|
-		(?:
-			%%
-			(?<command> [a-z]+ )
-			\s*
-			(?<args> .+? )?
-		)
-	)?
-	|
-	.*
+		%
+		(?<element> $re_html_element )
+		(?<fastlane> \( .*? \) )?
+		(?<classes> ( \. $re_css_class )+ )?
+		(?<id> \# $re_css_id )?
+		(?<attrs> \{ [^\}]* \} )?
+		(?<data> ( \s+ & [^=]+ = \S+ )+ )?
+		(?<hooks>
+			(?: \s+ ! $re_hooks )+
+		)?
+		(?<coffee> \s+ -> \s+ )?
+		\s*
+		(?<rest> .*)?
+	)
+|
+	(?<special>
+		%%
+		(?<command> [a-z]+ )
+		\s*
+		(?<args> .+? )?
+	)
 )
 \s*
 $/xism) {
-		local %_ = %+;
-		if ($_{indent} eq "@indent") { # same level
-#			say "=$line";
-			if ($line =~ m{^\s*"""$}) {
-				$self->{capture_raw_block} = 1;
-				push @{$self->{level}} => $self->{struct};
-				$self->{struct} = [];
-				push @{$self->{indent}} => '';
+				$self->_elem({%+}, $struct);
 			} else {
-				push @{$self->{struct}} => $self->_elem(%_);
+				$struct->{C} =~ s{^\\}{};
+				%$struct = (
+					text => $struct->{C},
+					lineno => $struct->{L},
+					file => $self->{file},
+					indent => scalar @{$struct->{I}}
+				);
 			}
-		} elsif (substr($_{indent}, 0, length "@indent") eq "@indent") { # level up
-#			say "+$line";
-			push @{$self->{indent}} => substr($_{indent}, length "@indent");
-			if ($line =~ m{^\s*"""$}) {
-				$self->{capture_raw_block} = 2;
-				my $n = $self->{struct}->[-1]->{items} = [];
-				push @{$self->{level}} => $self->{struct};
-				$self->{struct} = $n;
-			} else {
-				my $n = [ ];
-				$self->{struct}->[-1]->{items} = $n;
-				push @{$self->{level}} => $self->{struct};
-				$self->{struct} = $n;
-				push @$n => $self->_elem(%_);
-			}
-		} else { # level down
-#			say "-$line";
-			if ($self->{capture_js_block}) {
-				$self->{capture_js_block} = 0;
-				my $x = delete($self->{level}->[-1]->[-1])->{coffee};
-				if (@{$self->{level}} > 1) {
-					push @{$self->{level}->[-2]->[-1]->{coffee}} => @{ $x };
-				} else {
-					push @{$self->{coffee}} => @$x;
-				}
-			}
-			while (pop @{$self->{indent}}) {
-				$self->{struct} = pop @{$self->{level}};
-				if ($_{indent} eq join '', @{$self->{indent}}) {
-					push @{$self->{struct}} => $self->_elem(%_);
-					return;
-				}
-			}
-			carp "LOST: $line";
+		} elsif (ref $struct->{C} eq 'ARRAY') {
+			%$struct = (
+				text => join (EOL, @{$struct->{C}}),
+				lineno => $struct->{L},
+				file => $self->{file},
+				indent => scalar @{$struct->{I}}
+			);
+		} else {
+			croak "unknown C";
 		}
+	} elsif (exists $struct->{E}) {
+		%$struct = (
+			lineno => $struct->{L},
+			file => $self->{file},
+			indent => scalar @{$struct->{I}}
+		);
 	} else {
-		carp "unparsable line: <<$line>>"
+		%$struct = ();
+	}
+	$struct->{items} = $items if defined $items;
+	if (exists $struct->{items} and ref $struct->{items} eq 'ARRAY') {
+		$self->_process($_) for @{$struct->{items}};
+	}
+	pop @{$self->{stack}};
+	if (exists $struct->{C}) {
+		croak "uaah";
 	}
 }
 
@@ -329,18 +385,17 @@ sub parse {
 	my ($self, $in) = @_;
 
 	$self->{struct} = [];
-	$self->{root} = [ $self->{struct} ];
-	$self->{level} = [];
 	$self->{indent} = [ map { '' } 1..$self->{opts}->{indent} ];
-	$self->{capture_js_block} = 0;
-	$self->{capture_raw_block} = 0;
 	$self->{anonymous_element_id} = $self->{opts}->{idoffset} || 0;
-	$self->{assigns} = {};
-	$self->{coffee} = [];
+	$self->{current} = [];
+	$self->{stack} = [ $self->{current} ];
 
 	$in ||= *STDIN;
 	
+	$self->{file} = "<".ref($in).">";
+	
 	if (defined $in and not ref $in) {
+		$self->{file} = $in;
 		open my $fh, $in or croak "cannot open $in: $!";
 		$in = $fh;
 	}
@@ -353,6 +408,20 @@ sub parse {
 	} else {
 		croak "unknown type: ".ref $in;
 	}
+	
+	if (exists $self->{raw}) {
+		croak "raw block not closed!";
+	}
+	
+	$self->{root} = $self->{stack}->[0];
+	delete $self->{current};
+	$self->{stack} = [ $self->{root} ];
+	
+	$self->_process($self->{root});
+	
+	delete $self->{stack};
+	delete $self->{struct};
+	delete $self->{indent};
 
 	return $self;
 }
