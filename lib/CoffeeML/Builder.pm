@@ -241,7 +241,7 @@ sub _build($_) {
 				}
 			} elsif (exists $e->{comment}) {
 				my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
-				$self->_outp($indent.'<!--#--!>'.EOL._indent($e->{text},$indent.'    ').EOL.$indent.'<---#--->'.EOL);
+				$self->_outp($indent.'<!--#--!>'.EOL._indent($e->{text},$indent.'    # ').EOL.$indent.'<---#--->'.EOL);
 			} elsif (exists $e->{coffeeblock}) {
 				# ignore
 			} elsif (exists $e->{indent}) {

@@ -116,6 +116,9 @@ sub _flatten {
 	}
 	pop @{$struct->{I}} for 0..$indent_offset;
 	return unless defined $struct->{C};
+	if (exists $struct->{comment}) {
+		$struct->{C} = '###'.(exists $struct->{jsdoc} ? '*' : '').EOL.(join EOL, @{$struct->{C}}).EOL.'###';
+	}
 	return join('' => @{$struct->{I}}).$struct->{C}, (exists $struct->{E} ? $self->_flatten($struct->{E}, $indent_offset) : ());
 }
 
@@ -274,9 +277,10 @@ sub _parseln {
 				local $_ = $1;
 				tr{<}{>};
 				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => length($stp) };
-			} elsif ($obj->{C} =~ m{^(#{3,})$}) {
+			} elsif ($obj->{C} =~ m{^(#{3,})(\*)?$}) {
 				my $stp = join('', @{$obj->{I}});
 				$obj->{comment} = 1;
+				$obj->{jsdoc} = $2;
 				local $_ = $1;
 				$self->{raw} = { stp => $stp.$_, cnt => [], obj => $obj, dnt => length($stp) };
 			}
@@ -300,7 +304,7 @@ sub _process {
 	if (exists $struct->{C} and defined $struct->{C}) {
 		if (not ref $struct->{C}) {
 			if ($struct->{C} =~ m{^#}) {
-				%$struct = ();
+				$struct->{ignore} = 1;
 				return;
 			}
 			my $re_hooks = $self->{re_hooks};
@@ -426,7 +430,8 @@ sub parse {
 	}
 	
 	if (exists $self->{raw}) {
-		croak "raw block not closed!";
+		use Data::Dumper;
+		croak "raw block not closed, started at line ".$self->{raw}->{obj}->{L};
 	}
 	
 	$self->{root} = $self->{stack}->[0];
