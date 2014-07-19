@@ -120,7 +120,7 @@ sub _flatten {
 }
 
 sub _elem {
-	my ($self, $capture, $struct) = @_;
+	my ($self, $capture, $struct, $items) = @_;
 	local %_ = %$capture;
 	$_{indent} = scalar @{$struct->{I}};
 	$_{lineno} = $struct->{L};
@@ -191,8 +191,9 @@ sub _elem {
 		}
 	} elsif (exists $_{special}) {
 		delete $_{special};
+		$_{filters} = [ grep m{\S}, split m{\s*\|\s*}, delete $_{filter} ] if exists $_{filter};
 		if (exists $self->{commands}->{$_{command}}) {
-			$self->{commands}->{$_{command}}->($self, \%_, $_{args});
+			$self->{commands}->{$_{command}}->($self, \%_, $_{args}, $items);
 		}
 	}
 	%$struct = %_;
@@ -327,10 +328,18 @@ sub _process {
 		\s*
 		(?<args> .+? )?
 	)
+	(?<filter>
+		(?:
+			\s+
+			\|
+			\s+
+			[a-z]+
+		)+
+	)?
 )
 \s*
 $/xism) {
-				$self->_elem({%+}, $struct);
+				$self->_elem({%+}, $struct, $items);
 			} else {
 				$struct->{C} =~ s{^\\}{};
 				%$struct = (
@@ -382,6 +391,7 @@ sub parse {
 	$self->{anonymous_element_id} = $self->{opts}->{idoffset} || 0;
 	$self->{current} = [];
 	$self->{stack} = [ $self->{current} ];
+	$self->{coffee} = [];
 	
 	{
 		local @_ = ();

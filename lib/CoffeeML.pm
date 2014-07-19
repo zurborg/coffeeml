@@ -114,23 +114,31 @@ sub register_command {
 	$self->{builder}->{commands}->{$name} = $fn{build} if exists $fn{build};
 }
 
+=head2 register_filter(name, coderef)
+
+=cut
+
+sub register_filter {
+	my ($self, $name, $fn) = @_;
+	$self->{builder}->{filters}->{$name} = $fn;
+}
+
 sub _init {
 	my $self = shift;
 
-	$self->register_command('coffee',	
+	$self->register_command('coffee',
 		parse => sub {
-			my ($self, $e, $args) = @_;
+			my ($self, $e, $args, $items) = @_;
 			if (exists $self->{stack}->[-2]) {
 				if (not exists $self->{stack}->[-2]->{attrs}->{id}) {
 					$self->{stack}->[-2]->{attrs}->{id} = $self->_nextid;
 				}
-				$self->{stack}->[-2]->{coffee} = [ $self->_flatten(delete $e->{items}, $e->{indent}) ];
+				$self->{stack}->[-2]->{coffee} = [ $self->_flatten([ @$items ], $e->{indent}) ];
+				@$items = ();
 				$e->{ignore} = 1;
 			}
 		},
-		build => sub {
-			#...
-		}
+		build => sub {}
 	);
 	$self->register_command('textile',
 		build => sub {
@@ -146,15 +154,16 @@ sub _init {
 	);
 	$self->register_command('include',
 		build => sub {
-			my ($self, $e, $file) = @_;
-			$file || croak "command include: no arguments given, filename needed";
-			open my $fh, $file or croak "command inlcude: cannot open file $file: $!";
-			$self->_outp(('  ' x ($e->{indent} + $self->{indentoffset})).$_) for <$fh>;
+			my ($self, $e, $args) = @_;
+			$args =~ m{^\s* (?<filename> [^\|]+)\s*$}x || croak "command include: no arguments given, filename needed";
+			open my $fh, $+{filename} or croak "command inlcude: cannot open file $+{filename}: $!";
+			$e->{text} = '';
+			$e->{text} .= $_ for <$fh>;
 			close $fh;
 			if (exists $e->{items}) {
 				$self->_error($e, "discarding additional content (".$self->_flatten($e->{items}).")");
 			}
-			return;
+			return 1;
 		}
 	);
 	$self->register_command('process',

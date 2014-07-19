@@ -45,6 +45,19 @@ sub new {
 	my $self = {};
 	
 	$self->{opts} = $options || {};
+	$self->{commands} = {};
+	$self->{filters} = {
+		textile => sub {
+			my ($self, $e) = @_;
+			use Text::Textile qw(textile);
+			$e->{text} = textile($e->{text});
+		},
+		escape => sub {
+			my ($self, $e) = @_;
+			use HTML::Entities qw(encode_entities);
+			$e->{text} = encode_entities($e->{text});
+		},
+	};
 
 	return bless $self => ref $class || $class;
 }
@@ -144,7 +157,16 @@ sub _build($_) {
 				if (exists $self->{commands}->{$e->{command}}) {
 					return unless $self->{commands}->{$e->{command}}->($self, $e, $e->{args});
 				} else {
-					$self->_error($e, "unknwon command: ".$e->{command});
+					$self->_error($e, "unknown command: ".$e->{command});
+				}
+				if (exists $e->{filters}) {
+					foreach my $filter (@{$e->{filters}}) {
+						if (exists $self->{filters}->{$filter}) {
+							$self->{filters}->{$filter}->($self, $e);
+						} else {
+							$self->_error($e, "unknown filter: $filter");
+						}
+					}
 				}
 			}
 			if (exists $e->{element}) {
@@ -166,7 +188,7 @@ sub _build($_) {
 					when ([qw[ script ]]) {
 						if (exists $e->{output_coffee}) {
 							$self->{indentoffset}++;
-							$e->{items} = [{indent => 0, line => '' }, { indent => $e->{indent} + $self->{indentoffset}, line => $self->_javascript }];
+							$e->{items} = [{indent => 0, text => '' }, { indent => $e->{indent} + $self->{indentoffset}, text => $self->_javascript }];
 							$self->{indentoffset}--;
 						}
 					}
@@ -206,8 +228,13 @@ sub _build($_) {
 						my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
 						$self->_outp(_indent(join(EOL, @{$e->{text}}), $indent.'  ').EOL);
 						$self->_outp($indent.'</'.$e->{element}.'>'.EOL);
+					} elsif ($e->{text} =~ m{\n}s) {
+						$self->_outp('>'.EOL);
+						my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
+						$self->_outp(_indent($e->{text}, $indent.'  ').EOL);
+						$self->_outp($indent.'</'.$e->{element}.'>'.EOL);
 					} else {
-						$self->_outp('>'.$e->{text}.'</'.$e->{text}.'>'.EOL);
+						$self->_outp('>'.$e->{text}.'</'.$e->{element}.'>'.EOL);
 					}
 				} else {
 					$self->_outp('></'.$e->{element}.'>'.EOL);
@@ -218,10 +245,9 @@ sub _build($_) {
 			} elsif (exists $e->{coffeeblock}) {
 				# ignore
 			} elsif (exists $e->{indent}) {
-				$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
-				#_dump_without_items($e);
 				if (exists $e->{text}) {
-					$self->_outp($e->{text});
+					my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
+					$self->_outp(_indent($e->{text}, $indent).EOL);
 				} elsif (exists $e->{rest}) {
 					$self->_outp($e->{rest});
 				}
@@ -230,7 +256,6 @@ sub _build($_) {
 			} elsif (exists $e->{items}) {
 				$self->_build($e->{items});
 			} else {
-				_dump_without_items($e);
 				$self->_error($e, "meh");
 			}
 			
@@ -255,8 +280,6 @@ sub _build($_) {
 
 sub _javascript {
 	my ($self) = @_;
-	
-	return '';
 	
 	my $JS = '';
 	
