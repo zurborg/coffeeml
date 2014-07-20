@@ -129,11 +129,19 @@ sub _init {
 	$self->register_command('coffee',
 		parse => sub {
 			my ($self, $e, $args, $items) = @_;
-			if (exists $self->{stack}->[-2]) {
+			if (defined $args and $args eq 'root') {
+				push @{$self->{coffee}} => $self->_flatten([ @$items ], 0);
+			} elsif (exists $self->{stack}->[-2]) {
 				my $p = $self->{stack}->[-2];
 				if (ref $p eq 'HASH') {
 					$self->_assign_target($p);
-					$p->{coffee} = [ $self->_flatten([ @$items ], $e->{indent}) ];
+					unless (exists $p->{coffee}) {
+						$p->{coffee} = [];
+					}
+					unless (ref $p->{coffee} eq 'ARRAY') {
+						$p->{coffee} = [ $p->{coffee} ];
+					}
+					push @{$p->{coffee}} => $self->_flatten([ @$items ], $e->{indent});
 					@$items = ();
 					$e->{ignore} = 1;
 				} elsif (ref $p eq 'ARRAY') {
