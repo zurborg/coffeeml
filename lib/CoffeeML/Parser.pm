@@ -198,7 +198,8 @@ sub _elem {
 		}
 		given ($_{element}) {
 			when ([qw[ style ]]) {
-				$_{text} = [ $self->_flatten(delete $_{items}, $_{indent}) ];
+				$_{text} = [ $self->_flatten($items, $_{indent}) ];
+				@$items = ();
 			}
 		}
 	} elsif (exists $_{special}) {
@@ -300,10 +301,6 @@ sub _parseln {
 sub _process {
 	my ($self, $struct) = @_;
 	push @{$self->{stack}} => $struct;
-	if(0){
-		use Data::Dumper;
-		say Dumper($struct);
-	}
 	if (ref $struct eq 'ARRAY') {
 		$self->_process($_) for @$struct;
 		pop @{$self->{stack}};
@@ -382,7 +379,7 @@ $/xism) {
 	} else {
 		%$struct = ();
 	}
-	$struct->{items} = $items if defined $items;
+	$struct->{items} = $items if defined $items and @$items > 0;
 	if (exists $struct->{items} and ref $struct->{items} eq 'ARRAY') {
 		$self->_process($_) for @{$struct->{items}};
 	}
@@ -439,7 +436,6 @@ sub parse {
 	}
 	
 	if (exists $self->{raw}) {
-		use Data::Dumper;
 		croak "raw block not closed, started at line ".$self->{raw}->{obj}->{L};
 	}
 	

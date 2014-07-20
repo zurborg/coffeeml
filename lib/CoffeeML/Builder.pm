@@ -169,6 +169,7 @@ sub _build($_) {
 						$self->_build(delete $e->{items});
 						$e->{text} = ${ $self->{outp} };
 						$self->{outp} = $outp;
+						$self->{indentoffset} = $ndnt;
 					}
 
 					foreach my $filter (@{$e->{filters}}) {
@@ -223,7 +224,9 @@ sub _build($_) {
 						$self->_outp('>'.$e->{items}->[0]->{text}.'</'.$e->{element}.'>'.EOL);
 					} elsif ($e->{element} eq 'pre') {
 						$self->_outp('>');
+						$self->{indentoffset} -= 2**16;
 						$self->_build($e->{items});
+						$self->{indentoffset} += 2**16;
 						$self->_outp('</'.$e->{element}.'>'.EOL);
 					} else {
 						$self->_outp('>'.EOL);
@@ -260,9 +263,8 @@ sub _build($_) {
 					my $indent = '  ' x ($e->{indent} + $self->{indentoffset});
 					$self->_outp(_indent($e->{text}, $indent).EOL);
 				} elsif (exists $e->{rest}) {
-					$self->_outp($e->{rest});
+					$self->_outp($e->{rest}.EOL);
 				}
-				$self->_outp(EOL);
 				$self->_build($e->{items}) if exists $e->{items};
 			} elsif (exists $e->{items}) {
 				$self->_build($e->{items});
