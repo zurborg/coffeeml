@@ -339,7 +339,7 @@ sub _process {
 		%%
 		(?<command> [a-z]+ )
 		\s*
-		(?<args> .+? )?
+		(?<args> [^\|]+? )?
 	)
 	(?<filter>
 		(?:

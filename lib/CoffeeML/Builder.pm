@@ -160,6 +160,17 @@ sub _build($_) {
 					$self->_error($e, "unknown command: ".$e->{command});
 				}
 				if (exists $e->{filters}) {
+
+					if (exists $e->{items}) {
+						my $outp = $self->{outp};
+						my $ndnt = $self->{indentoffset};
+						$self->{indentoffset} = 0 - $e->{indent} - 1;
+						$self->{outp} = \'';
+						$self->_build(delete $e->{items});
+						$e->{text} = ${ $self->{outp} };
+						$self->{outp} = $outp;
+					}
+
 					foreach my $filter (@{$e->{filters}}) {
 						if (exists $self->{filters}->{$filter}) {
 							$self->{filters}->{$filter}->($self, $e);
