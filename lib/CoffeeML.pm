@@ -229,24 +229,11 @@ sub _init {
 			return;
 		}
 	);
-	$self->register_command('raw',
-		build => sub {
-			my ($self, $e, $args) = @_;
-			my $outp = $self->{outp};
-			my $ndnt = $self->{indentoffset};
-			$self->{indentoffset} = 0 - $e->{indent} - 1;
-			$self->{outp} = \'';
-			$self->_build(delete $e->{items});
-			my $result = ${ $self->{outp} };
-			$self->{outp} = $outp;
-			$result =~ s{&(?![a-z]+;)}{&amp;}g;
-			$result =~ s{<}{&lt;}g;
-			$result =~ s{>}{&gt;}g;
-			$self->_outp($result);
-			$self->{indentoffset} = $ndnt;
-			return;
-		}
-	);
+	$self->register_command('filter', build => sub {
+		my ($self, $e, $args) = @_;
+		# TODO: parse $args and apply filters
+		return 1;
+	});
 	return $self;
 }
 
