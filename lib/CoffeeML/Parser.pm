@@ -77,10 +77,7 @@ sub new {
 			re => qr{assign\((?<name>[a-z0-9\._]+)\)},
 			fn => sub {
 				my ($self, $e, $m) = @_;
-				unless (exists $e->{attrs}->{id}) {
-					$e->{attrs}->{id} = $self->_nextid;
-				}
-				$self->{assigns}->{$m->{name}} = $e->{attrs}->{id};
+				$self->{assigns}->{$m->{name}} = $self->_assign_target($e);
 			}
 		},
 		coffee => {
@@ -122,6 +119,20 @@ sub _flatten {
 	return join('' => @{$struct->{I}}).$struct->{C}, (exists $struct->{E} ? $self->_flatten($struct->{E}, $indent_offset) : ());
 }
 
+sub _assign_target {
+	my ($self, $e) = @_;
+	return unless ref $e eq 'HASH';
+	if ($e->{element} ~~ [qw[ html head body ]]) {
+		$e->{target} = $e->{element};
+	} else {
+		unless (exists $e->{attrs}->{id}) {
+			$e->{attrs}->{id} = $self->_nextid;
+		}
+		$e->{target} = '#'.$e->{attrs}->{id};
+	}
+	return $e->{target};
+}
+
 sub _elem {
 	my ($self, $capture, $struct, $items) = @_;
 	local %_ = %$capture;
@@ -153,9 +164,7 @@ sub _elem {
 		}
 		if (exists $_{coffee}) {
 			$_{coffee} = delete $_{rest};
-			unless (exists $_{attrs}->{id}) {
-				$_{attrs}->{id} = $self->_nextid;
-			}
+			$self->_assign_target(\%_);
 		}
 		if (exists $_{data}) {
 			$_{attrs} = { %{$_{attrs}}, map {( split /=/, $_, 2 )} map { "data-$_" } grep length, split /

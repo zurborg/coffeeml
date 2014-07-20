@@ -260,13 +260,13 @@ sub _build($_) {
 			}
 			
 			if (exists $e->{coffee}) {
-				my $id = $e->{attrs}->{id};
+				my $target = $e->{target};
 				my $coffee = $e->{coffee};
 				if (ref $coffee eq 'ARRAY') {
 					$coffee = join EOL, @$coffee, 'undefined';
 				}
-				if (defined $id) {
-					$self->{coffeescript} .= sprintf q!(->%s).call($('#%s'))!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $id;
+				if (defined $target) {
+					$self->{coffeescript} .= sprintf q!(->%s).call($('%s'))!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $target;
 				} else {
 					$self->{coffeescript} .= sprintf q!(->%s).call($)!.EOL.EOL, EOL._indent($coffee, '  ').EOL;
 				}
@@ -290,9 +290,9 @@ sub _javascript {
 			'window.jQuery ($) ->'.EOL.
 			_indent(join(EOL, map { sprintf q!%s = $('#%s')!, $_, $assigns->{$_} } keys %$assigns), '  ').EOL.
 			EOL.
-			_indent($self->{coffeescript}, '  ').EOL.
-			EOL.
 			_indent((join EOL, @{$self->{struct}->{coffee}}), '  ').EOL.
+			EOL.
+			_indent($self->{coffeescript}, '  ').EOL.
 			EOL.
 			'  undefined'.EOL
 		);

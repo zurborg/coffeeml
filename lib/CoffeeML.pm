@@ -130,12 +130,15 @@ sub _init {
 		parse => sub {
 			my ($self, $e, $args, $items) = @_;
 			if (exists $self->{stack}->[-2]) {
-				if (not exists $self->{stack}->[-2]->{attrs}->{id}) {
-					$self->{stack}->[-2]->{attrs}->{id} = $self->_nextid;
+				my $p = $self->{stack}->[-2];
+				if (ref $p eq 'HASH') {
+					$self->_assign_target($p);
+					$p->{coffee} = [ $self->_flatten([ @$items ], $e->{indent}) ];
+					@$items = ();
+					$e->{ignore} = 1;
+				} elsif (ref $p eq 'ARRAY') {
+					push @{$self->{coffee}} => $self->_flatten([ @$items ], 0);
 				}
-				$self->{stack}->[-2]->{coffee} = [ $self->_flatten([ @$items ], $e->{indent}) ];
-				@$items = ();
-				$e->{ignore} = 1;
 			}
 		},
 		build => sub {}
