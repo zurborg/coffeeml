@@ -192,7 +192,7 @@ sub _elem {
 			foreach my $hook (split /\s+/, delete $_{hooks}) {
 				next unless $hook =~ /\S/;
 				$hook =~ s{^\!}{};
-				foreach my $hook_ (keys $self->{hooks}) {
+				foreach my $hook_ (keys %{$self->{hooks}}) {
 					if (exists $self->{hooks}->{$hook_}->{re} and $hook =~ $self->{hooks}->{$hook_}->{re}) {
 						$self->{hooks}->{$hook_}->{fn}->($self, \%_, {%+});
 					} elsif ($hook eq $hook_) {
