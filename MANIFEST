@@ -6,7 +6,6 @@ MANIFEST
 README
 INSTALL
 t/00-load.t
-t/01-parser.t
 t/pod-coverage.t
 t/pod.t
 bin/coffeemaker

@@ -10,7 +10,10 @@
     EXE_FILES           => [qw[ bin/coffeemaker ]],
     PREREQ_PM           => {
         'Test::Most'        => 0,
-		'Modern::Perl'      => 0,
+        'Modern::Perl'      => 0,
+        'IPC::Run'          => 0,
+        'Text::Textile'     => 0,
+        'HTML::Entities'    => 0,
     },
     dist                => {
         COMPRESS            => 'gzip -9f',

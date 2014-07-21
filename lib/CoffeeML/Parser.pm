@@ -101,6 +101,10 @@ sub new {
 	return bless $self => ref $class || $class;
 }
 
+=head2 clone
+
+=cut
+
 sub clone {
 	my ($self, $options) = @_;
 	my $class = ref $self;
