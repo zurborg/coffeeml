@@ -141,7 +141,13 @@ sub _init {
 					unless (ref $p->{coffee} eq 'ARRAY') {
 						$p->{coffee} = [ $p->{coffee} ];
 					}
-					push @{$p->{coffee}} => $self->_flatten([ @$items ], $e->{indent});
+					if (defined $args) {
+						$p->{coffeeextra} ||= {};
+						$p->{coffeeextra}->{$args} ||= [];
+						push @{$p->{coffeeextra}->{$args}} => $self->_flatten([ @$items ], $e->{indent});
+					} else {
+						push @{$p->{coffee}} => $self->_flatten([ @$items ], $e->{indent});
+					}
 					@$items = ();
 					$e->{ignore} = 1;
 				} elsif (ref $p eq 'ARRAY') {

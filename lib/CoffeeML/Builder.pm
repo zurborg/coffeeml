@@ -279,7 +279,12 @@ sub _build($_) {
 					$coffee = join EOL, @$coffee, 'undefined';
 				}
 				if (defined $target) {
-					$self->{coffeescript} .= sprintf q!(->%s).call($('%s'))!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $target;
+					$self->{coffeescript} .= sprintf q!(->%s).call($ '%s')!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $target;
+					if (exists $e->{coffeeextra}) {
+						foreach my $extra (keys %{$e->{coffeeextra}}) {
+							$self->{coffeescript} .= sprintf q!(->%s).call($('%s').%s)!.EOL.EOL, EOL._indent(join(EOL, @{$e->{coffeeextra}->{$extra}}), '  ').EOL, $target, $extra;
+						}
+					}
 				} else {
 					$self->{coffeescript} .= sprintf q!(->%s).call($)!.EOL.EOL, EOL._indent($coffee, '  ').EOL;
 				}
@@ -294,12 +299,20 @@ sub _build($_) {
 sub _javascript {
 	my ($self) = @_;
 	
-	my $JS = '';
+	my $CS = $self->_coffeescript;
+	
+	return $CS ? $self->_compile_coffeescript($CS) : '';
+}
+
+sub _coffeescript {
+	my ($self) = @_;
+	
+	my $CS = '';
 	
 	my $assigns = $self->{struct}->{assigns};
 	
 	if (keys %$assigns or length $self->{coffeescript} or scalar @{$self->{struct}->{coffee}}) {
-		$JS .= $self->_compile_coffeescript(
+		$CS .= (
 			'window.jQuery ($) ->'.EOL.
 			_indent(join(EOL, map { sprintf q!%s = $('#%s')!, $_, $assigns->{$_} } keys %$assigns), '  ').EOL.
 			EOL.
@@ -312,7 +325,7 @@ sub _javascript {
 	}
 	$self->{coffeescript} = '';
 	
-	return $JS;
+	return $CS;
 }
 
 =head2 build($document, $output_handle)
