@@ -2,7 +2,7 @@ package CoffeeML::Parser;
 
 use Modern::Perl;
 use Carp;
-use Clone qw(clone);
+use Clone ();
 
 =head1 NAME
 
@@ -99,6 +99,16 @@ sub new {
 	};
 
 	return bless $self => ref $class || $class;
+}
+
+sub clone {
+	my ($self, $options) = @_;
+	my $class = ref $self;
+	$self = Clone::clone($self);
+	
+	$self->{opts} = { %{$self->{opts}}, %$options };
+	
+	return bless $self => $class;
 }
 
 sub _nextid {
@@ -250,7 +260,7 @@ sub _parseti {
 		if ($ok) {
 			pop @{$self->{indent}} for 1..$i;
 			$self->{current} = pop @{$self->{stack}} for 1..$i;
-			$obj->{I} = clone($self->{indent});
+			$obj->{I} = Clone::clone($self->{indent});
 			push @{$self->{current}} => $obj;
 		} else {
 			croak "indentation error";

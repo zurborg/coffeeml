@@ -62,7 +62,7 @@ sub new {
 		builder => $builder,
 	};
 	$self = bless $self => ref $class || $class;
-	return $self->_init;
+	return $self->_init($parser, $builder);
 }
 
 =head2 process($in, $out, %options)
@@ -124,7 +124,7 @@ sub register_filter {
 }
 
 sub _init {
-	my $self = shift;
+	my ($self, $parser, $builder) = @_;
 
 	$self->register_command('coffee',
 		parse => sub {
@@ -200,14 +200,14 @@ sub _init {
 			my ($self, $e, $file) = @_;
 			$file || $self->_error($e, "no arguments given, filename needed for command process");
 			$self->{indentoffset}++;
-			my $parser = CoffeeML::Parser->new({
+			my $parser_ = $parser->clone({
 				idoffset => $self->{struct}->{anonymous_element_id},
 				indent => $e->{indent} + $self->{indentoffset}
 			});
 			$self->{indentoffset}--;
-			my $struct = $parser->parse($file);
-			$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
-			$self->_build($struct->{root});
+			$parser_->parse($file);
+			$self->{struct}->{anonymous_element_id} = $parser_->{anonymous_element_id};
+			$self->_build($parser_->{root});
 			if (exists $e->{items}) {
 				$self->_error($e, "discarding additional content");
 			}
@@ -222,15 +222,16 @@ sub _init {
 				$self->_error($e, "no content in wrapper");
 				return;
 			}
-			my $parser = CoffeeML::Parser->new({
+			my $parser_ = $parser->clone({
 				idoffset => $self->{struct}->{anonymous_element_id},
 				indent => $e->{indent} + $self->{indentoffset}
 			});
-			my $struct = $parser->parse($file);
-			$self->{struct}->{anonymous_element_id} = $parser->{anonymous_element_id};
+			$parser_->parse($file);
+			$self->{struct}->{anonymous_element_id} = $parser_->{anonymous_element_id};
 			push @{$self->{content}} => $e->{items};
-			$self->_build($struct->{root});
+			$self->_build($parser_->{root});
 			carp "wrapper file processed, but content not inserted" if scalar(@{$self->{content}}) > 0;
+			
 			return;
 		}
 	);
