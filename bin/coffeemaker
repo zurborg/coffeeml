@@ -2,10 +2,58 @@
 
 use Modern::Perl;
 use Data::Dumper;
+use Getopt::Long qw(GetOptions);
+use Pod::Usage qw(pod2usage);
+use Class::Load qw(load_class);
 
-use CoffeeML;
+my ($opt_help, $js_file, $cs_file, $css_file, $sass_file);
 
+GetOptions(
+	'help' => \$opt_help,
+	'js=s' => \$js_file,
+	'cs=s' => \$cs_file,
+	'css=s' => \$css_file,
+	'sass=s' => \$sass_file,
+) or pod2usage(2);
+pod2usage(1) if ($opt_help);
+
+load_class 'CoffeeML';
 my $cml = CoffeeML->new;
 
 $cml->process(\*STDIN, \*STDOUT);
 
+if ($cs_file) {
+	open my $FH, '>'.$cs_file or die "cannot open $cs_file: $!";
+	print $FH $cml->{builder}->_coffeescript;
+	close $FH;
+}
+
+if ($js_file) {
+	open my $FH, '>'.$js_file or die "cannot open $js_file: $!";
+	print $FH $cml->{builder}->_javascript;
+	close $FH;
+}
+
+if ($sass_file) {
+	open my $FH, '>'.$sass_file or die "cannot open $sass_file: $!";
+	print $FH $cml->{builder}->_sasslang || '';
+	close $FH;
+}
+
+if ($css_file) {
+	open my $FH, '>'.$css_file or die "cannot open $css_file: $!";
+	print $FH $cml->{builder}->_css || '';
+	close $FH;
+}
+
+__END__
+
+=head1 NAME
+
+coffeemaker - convert CoffeeML files to HTML files
+
+=head1 SYNOPSIS
+
+coffeemaker [B<--js javascript-output.js>] [B<--cs coffeescript-output.coffee>] [B<--css stylesheet-output.js>] [B<--sass sass-output.sass>]
+
+=cut
