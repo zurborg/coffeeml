@@ -84,7 +84,25 @@ sub _compile_coffeescript($$) {
     my $out = '';
     my $err = '';
     
+	print STDERR 'compiling coffeescript...';
     run ($coffeecmd, $in, \$out, \$err) or croak "coffeescript exited with status $?, errors: $err";
+	say STDERR 'ok';
+	
+	return $out;
+}
+
+sub _compile_sasslang($$) {
+	my ($self, $text) = @_;
+	use IPC::Run qw(run);
+    my $sasscmd = [ sass => qw[  ] ];
+    
+    my $in = \$text;
+    my $out = '';
+    my $err = '';
+    
+	print STDERR 'compiling sasslang...';
+    run ($sasscmd, $in, \$out, \$err) or croak "sass exited with status $?, errors: $err";
+	say STDERR 'ok';
 	
 	return $out;
 }
@@ -303,6 +321,8 @@ sub _build($_) {
 				if (defined $target) {
 					$self->{sasslang} ||= '';
 					$self->{sasslang}.= $target.EOL._indent($sass, '  ').EOL.EOL;
+				} else {
+					$self->_error($e, 'no target');
 				}
 			}
 		}
@@ -342,6 +362,19 @@ sub _coffeescript {
 	$self->{coffeescript} = '';
 	
 	return $CS;
+}
+
+sub _sasslang {
+	my ($self) = @_;
+	return undef unless exists $self->{sasslang};
+	return delete $self->{sasslang};
+}
+
+sub _css {
+	my ($self) = @_;
+	my $sass = $self->_sasslang;
+	return undef unless defined $sass;
+	return $self->_compile_sasslang($sass);
 }
 
 =head2 build($document, $output_handle)
