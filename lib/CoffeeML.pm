@@ -157,17 +157,6 @@ sub _init {
 		},
 		build => sub {}
 	);
-	$self->register_command('textile',
-		build => sub {
-			my ($self, $e, $args) = @_;
-			use Text::Textile qw(textile);
-			if (exists $e->{items}) {
-				$self->_outp($self->_indent(textile($self->_flatten(delete $e->{items})), ('  ' x ($e->{indent} + $self->{indentoffset}))).EOL);
-			} else {
-				$self->_error($e, "no content in textile");
-			}
-		}
-	);
 	$self->register_command('sass',
 		parse => sub {
 			my ($self, $e, $args, $items) = @_;
@@ -189,8 +178,8 @@ sub _init {
 					push @{$self->{sass}} => $self->_flatten([ @$items ], $e->{indent});
 				}
 			}
-			return;
-		}
+		},
+		build => sub {}
 	);
 	$self->register_command('include',
 		build => sub {
@@ -258,11 +247,15 @@ sub _init {
 			return;
 		}
 	);
-	$self->register_command('filter', build => sub {
-		my ($self, $e, $args) = @_;
-		# TODO: parse $args and apply filters
-		return 1;
-	});
+	$self->register_command('filter',
+		build => sub {
+			my ($self, $e, $args) = @_;
+			$self->_error($e, 'command filter need arguments') and return unless defined $args;
+			my @filters = grep { m{\S} } split m{[\s,]+}, $args;
+			$self->_filter($e, @filters);
+			return 1;
+		}
+	);
 	return $self;
 }
 
