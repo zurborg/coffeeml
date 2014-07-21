@@ -55,7 +55,7 @@ sub new {
 		escape => sub {
 			my ($self, $e) = @_;
 			use HTML::Entities qw(encode_entities);
-			$e->{text} = encode_entities($e->{text});
+			$e->{text} = encode_entities($e->{text}, '<>');
 		},
 	};
 
@@ -397,7 +397,9 @@ sub build {
 	}
 	$self->{outp} = $outp || *STDOUT;
 
+	say STDERR 'start building';
 	$self->_build($self->{struct}->{root});
+	say STDERR 'building done';
 	
 	$$outp = ${$self->{outp}} if ref $outp eq 'SCALAR';
 }

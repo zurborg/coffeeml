@@ -73,12 +73,6 @@ sub process {
 	my ($self, $in, $out, %opts) = @_;
 	%opts = ( %{$self->{opts}}, %opts );
 	my $struct = $self->{parser}->parse($in);
-	if (0) {
-		use Data::Dumper;
-		say STDERR '#' x 80;
-		say STDERR Dumper($struct->{root});
-		say STDERR '#' x 80;
-	}
 	$self->{builder}->build($struct, $out);
 }
 

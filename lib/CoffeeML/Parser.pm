@@ -435,7 +435,8 @@ sub parse {
 		open my $fh, $in or croak "cannot open $in: $!";
 		$in = $fh;
 	}
-
+	
+	print STDERR "parsing ".$self->{file}.'...';
 	if (ref $in eq 'SCALAR') {
 		$self->_parseln($_) for split /\n/, $$in;
 	} elsif (ref $in eq 'GLOB') {
@@ -444,6 +445,7 @@ sub parse {
 	} else {
 		croak "unknown type: ".ref $in;
 	}
+	say STDERR 'ok';
 	
 	if (exists $self->{raw}) {
 		croak "raw block not closed, started at line ".$self->{raw}->{obj}->{L};
