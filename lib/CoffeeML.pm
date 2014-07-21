@@ -166,6 +166,29 @@ sub _init {
 			} else {
 				$self->_error($e, "no content in textile");
 			}
+		}
+	);
+	$self->register_command('sass',
+		parse => sub {
+			my ($self, $e, $args, $items) = @_;
+			if (exists $self->{stack}->[-2]) {
+				my $p = $self->{stack}->[-2];
+				if (ref $p eq 'HASH') {
+					$self->_assign_target($p);
+					unless (exists $p->{sass}) {
+						$p->{sass} = [];
+					}
+					unless (ref $p->{sass} eq 'ARRAY') {
+						$p->{sass} = [ $p->{sass} ];
+					}
+					push @{$p->{sass}} => $self->_flatten([ @$items ], $e->{indent});
+					@$items = ();
+					$e->{ignore} = 1;
+				} elsif (ref $p eq 'ARRAY') {
+					$self->{sass} ||= [];
+					push @{$self->{sass}} => $self->_flatten([ @$items ], $e->{indent});
+				}
+			}
 			return;
 		}
 	);

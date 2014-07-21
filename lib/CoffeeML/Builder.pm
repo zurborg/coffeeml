@@ -294,6 +294,17 @@ sub _build($_) {
 					$self->{coffeescript} .= sprintf q!(->%s).call($)!.EOL.EOL, EOL._indent($coffee, '  ').EOL;
 				}
 			}
+			if (exists $e->{sass}) {
+				my $target = $e->{target};
+				my $sass = $e->{sass};
+				if (ref $sass eq 'ARRAY') {
+					$sass = join EOL, @$sass;
+				}
+				if (defined $target) {
+					$self->{sasslang} ||= '';
+					$self->{sasslang}.= $target.EOL._indent($sass, '  ').EOL.EOL;
+				}
+			}
 		}
 		default {
 			$self->_outp($e.EOL) if defined $e;
