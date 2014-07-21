@@ -140,6 +140,29 @@ sub _error {
 	}
 }
 
+sub _filter {
+	my ($self, $e, @filters) = @_;
+	
+	if (exists $e->{items}) {
+		my $outp = $self->{outp};
+		my $ndnt = $self->{indentoffset};
+		$self->{indentoffset} = 0 - $e->{indent} - 1;
+		$self->{outp} = \'';
+		$self->_build(delete $e->{items});
+		$e->{text} = ${ $self->{outp} };
+		$self->{outp} = $outp;
+		$self->{indentoffset} = $ndnt;
+	}
+	
+	foreach my $filter (@filters) {
+		if (exists $self->{filters}->{$filter}) {
+			$self->{filters}->{$filter}->($self, $e);
+		} else {
+			$self->_error($e, "unknown filter: $filter");
+		}
+	}
+}
+
 sub _build($_) {
 	my ($self, $e) = @_;
 	given (ref $e) {
@@ -160,25 +183,7 @@ sub _build($_) {
 					$self->_error($e, "unknown command: ".$e->{command});
 				}
 				if (exists $e->{filters}) {
-
-					if (exists $e->{items}) {
-						my $outp = $self->{outp};
-						my $ndnt = $self->{indentoffset};
-						$self->{indentoffset} = 0 - $e->{indent} - 1;
-						$self->{outp} = \'';
-						$self->_build(delete $e->{items});
-						$e->{text} = ${ $self->{outp} };
-						$self->{outp} = $outp;
-						$self->{indentoffset} = $ndnt;
-					}
-
-					foreach my $filter (@{$e->{filters}}) {
-						if (exists $self->{filters}->{$filter}) {
-							$self->{filters}->{$filter}->($self, $e);
-						} else {
-							$self->_error($e, "unknown filter: $filter");
-						}
-					}
+					$self->_filter($e, @{$e->{filters}});
 				}
 			}
 			if (exists $e->{element}) {
