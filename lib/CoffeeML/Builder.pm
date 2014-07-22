@@ -204,6 +204,24 @@ sub _build($_) {
 					$self->_filter($e, @{$e->{filters}});
 				}
 			}
+			if (exists $e->{coffee}) {
+				my $target = $e->{target};
+				my $coffee = $e->{coffee};
+				if (ref $coffee eq 'ARRAY') {
+					$coffee = join EOL, @$coffee, 'undefined';
+				}
+				if (defined $target) {
+					$self->{coffeescript} .= _indent(sprintf(q!(->%s).call($ '%s')!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $target), ('  ' x $self->{coffeescript_indent})).EOL;
+					if (exists $e->{coffeeextra}) {
+						foreach my $extra (keys %{$e->{coffeeextra}}) {
+							$self->{coffeescript} .= _indent(sprintf(q!(->%s).call($('%s').%s)!.EOL.EOL, EOL._indent(join(EOL, @{$e->{coffeeextra}->{$extra}}), '  ').EOL, $target, $extra), ('  ' x $self->{coffeescript_indent})).EOL;
+						}
+					}
+				} else {
+					#$self->{coffeescript} .= _indent(sprintf(q!(->%s).call($)!.EOL.EOL, EOL._indent($coffee, '  ').EOL), ('  ' x $self->{coffeescript_indent})).EOL;
+					$self->{coffeescript} .= _indent($coffee, ('  ' x $self->{coffeescript_indent})).EOL;
+				}
+			}
 			if (exists $e->{element}) {
 				
 				$self->_outp('  ' x ($e->{indent} + $self->{indentoffset}));
@@ -295,23 +313,6 @@ sub _build($_) {
 				$self->_error($e, "meh");
 			}
 			
-			if (exists $e->{coffee}) {
-				my $target = $e->{target};
-				my $coffee = $e->{coffee};
-				if (ref $coffee eq 'ARRAY') {
-					$coffee = join EOL, @$coffee, 'undefined';
-				}
-				if (defined $target) {
-					$self->{coffeescript} .= sprintf q!(->%s).call($ '%s')!.EOL.EOL, EOL._indent($coffee, '  ').EOL, $target;
-					if (exists $e->{coffeeextra}) {
-						foreach my $extra (keys %{$e->{coffeeextra}}) {
-							$self->{coffeescript} .= sprintf q!(->%s).call($('%s').%s)!.EOL.EOL, EOL._indent(join(EOL, @{$e->{coffeeextra}->{$extra}}), '  ').EOL, $target, $extra;
-						}
-					}
-				} else {
-					$self->{coffeescript} .= sprintf q!(->%s).call($)!.EOL.EOL, EOL._indent($coffee, '  ').EOL;
-				}
-			}
 			if (exists $e->{sass}) {
 				my $target = $e->{target};
 				my $sass = $e->{sass};
@@ -392,6 +393,7 @@ sub build {
 	
 	$self->{indentoffset} ||= 0;
 	$self->{coffeescript} = '';
+	$self->{coffeescript_indent} = 0;
 	$self->{macros} = {};
 	$self->{content} = [];
 	$self->{struct} = $struct;
