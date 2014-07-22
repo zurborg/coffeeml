@@ -117,7 +117,7 @@ sub clone {
 
 sub _nextid {
 	my $self = shift;
-	return 'anonymous_element_'.$self->{anonymous_element_id}++;
+	return 'anonymous_element'.join('', map { '_'.$_ } @{$self->{id_suffix}}).'_'.$self->{anonymous_element_id}++;
 }
 
 sub _flatten {
@@ -174,7 +174,7 @@ sub _elem {
 			$_{attrs}->{class} = join ' ' => grep length, split /\./, delete $_{classes};
 		}
 		if (exists $_{id}) {
-			$_{attrs}->{id} = substr delete $_{id}, 1;
+			$_{attrs}->{id} = substr(delete $_{id}, 1).join('', map { '_'.$_ } @{$self->{id_suffix}});
 		}
 		if (exists $_{coffee}) {
 			$_{coffee} = delete $_{rest};
@@ -416,6 +416,7 @@ sub parse {
 
 	$self->{struct} = [];
 	$self->{indent} = [ map { '' } 1..$self->{opts}->{indent} ];
+	$self->{id_suffix} = [];
 	$self->{anonymous_element_id} = $self->{opts}->{idoffset} || 0;
 	$self->{current} = [];
 	$self->{stack} = [ $self->{current} ];
