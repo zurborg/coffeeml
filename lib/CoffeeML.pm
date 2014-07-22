@@ -128,7 +128,9 @@ sub _init {
 			} elsif (exists $self->{stack}->[-2]) {
 				my $p = $self->{stack}->[-2];
 				if (ref $p eq 'HASH') {
-					$self->_assign_target($p);
+					unless (exists $p->{command}) {
+						$self->_assign_target($p);
+					}
 					unless (exists $p->{coffee}) {
 						$p->{coffee} = [];
 					}
