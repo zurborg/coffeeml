@@ -253,6 +253,54 @@ sub _init {
 			return 1;
 		}
 	);
+	$self->register_command('TT',
+		parse => sub {
+			my ($self, $e, $args, $items) = @_;
+			return if defined $args and $args !~ m{^\s*!js_(too|only)\s*$};
+			$e->{text} = [ $self->_flatten([ @$items ], $e->{indent}) ];
+			@$items = ();
+		},
+		build => sub {
+			my ($self, $e, $args) = @_;
+			my $indent = ('  ' x $self->{coffeescript_indent});
+			if (defined $args) {
+				my $js = '';
+				{
+					my $re = qr{\s*!js_(too|only)\s*$};
+					if ($args =~ $re) {
+						$js = $1;
+					}
+					$args =~ s{$re}{};
+				}
+				$self->{coffeescript} .= $indent."#[% $args %]\n" if $js;
+				if (exists $e->{items}) {
+					$e->{after} = sub {
+						my ($self, $e) = @_;
+						$self->{coffeescript} .= $indent."#[% END %]\n";
+					} if $js;
+					if ($js ne 'only') {
+						$e->{items} = [
+							{ indent => $e->{indent}, text => '[% '.$args.' %]' },
+							@{$e->{items}},
+							{ indent => $e->{indent}, text => '[% END %]' }
+						];
+					}
+				} elsif (ref $e->{text} eq 'ARRAY') {
+					$self->{coffeescript} .= join '' => map { $indent.$_."\n" } ( '###', '[%', @{$e->{text}}, '%]', '###') if $js;
+					$e->{items} = [
+						{ indent => $e->{indent}, text => '[%' },
+						@{delete $e->{text}},
+						{ indent => $e->{indent}, text => '%]' }
+					] if $js ne 'only';
+				} else {
+					$e->{text} = '[% '.$args.' %]' if $js ne 'only';
+				}
+			} else {
+				#$self->{coffeescript} .= join '' => map { $indent.$_."\n" } ( '###', '[%', @{$e->{text}}, '%]', '###');
+				$e->{text} = join "\n", '[%', @{$e->{text}}, '%]';
+			}
+		}
+	);
 	return $self;
 }
 
