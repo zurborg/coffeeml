@@ -325,6 +325,10 @@ sub _build($_) {
 					$self->_error($e, 'no target');
 				}
 			}
+			if (exists $e->{after}) {
+				my $subref = delete $e->{after};
+				$subref->($self, $e);
+			}
 		}
 		default {
 			$self->_outp($e.EOL) if defined $e;

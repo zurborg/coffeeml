@@ -397,6 +397,10 @@ $/xism) {
 	if (exists $struct->{items} and ref $struct->{items} eq 'ARRAY') {
 		$self->_process($_) for @{$struct->{items}};
 	}
+	if (exists $struct->{after}) {
+		my $sub = delete $struct->{after};
+		$sub->($self, $struct);
+	}
 	pop @{$self->{stack}};
 	if (exists $struct->{C}) {
 		croak "uaah";
