@@ -301,6 +301,49 @@ sub _init {
 			}
 		}
 	);
+	$self->register_command('loop',
+		parse => sub {
+			my ($self, $e, $args, $items) = @_;
+			die 'args?' unless defined $args;
+			die 'args!' unless $args =~ m{^\s* (\S+) \s+ => \s* (.+?) \s*$}x;
+			my ($id, $var) = ($1, $2);
+			$e->{loop} = { id => $id, var => $var };
+
+			$self->{anonymous_element_id_orig} ||= [];
+			push @{$self->{anonymous_element_id_orig}} => delete $self->{anonymous_element_id};
+			push @{$self->{id_suffix}} => $var;
+			$self->{anonymous_element_id} = 0;
+			$self->{assigns_orig} ||= [];
+			push @{$self->{assigns_orig}} => delete $self->{assigns};
+			$self->{assigns} = {};
+			$e->{after} = sub {
+				my ($self, $e) = @_;
+				$self->{anonymous_element_id} = pop @{$self->{anonymous_element_id_orig}};
+				pop @{$self->{id_suffix}};
+				$e->{assigns} = delete $self->{assigns};
+				$self->{assigns} = pop @{$self->{assigns_orig}};
+			};
+		},
+		build => sub {
+			my ($self, $e, $args) = @_;
+			my $indent = '  ' x $self->{coffeescript_indent};
+			{
+				my $assigns = $e->{assigns};
+				$self->{coffeescript} .= $self->_indent(join(EOL, map { sprintf q!%s = $ '%s'!, $_, delete $assigns->{$_} } keys %$assigns), $indent).EOL;
+			}
+			$self->{coffeescript} .= $indent.'(('.$e->{loop}->{id}.') ->'."\n";
+			$self->{coffeescript_indent}++;
+			
+			$e->{after} = sub {
+				my ($self, $e) = @_;
+				$self->{coffeescript_indent}--;
+				my $indent = '  ' x $self->{coffeescript_indent};
+				$self->{coffeescript} .= $indent.')(`'.$e->{loop}->{var}.'`)'."\n";
+			};
+			
+			return 1;
+		}
+	);
 	return $self;
 }
 
