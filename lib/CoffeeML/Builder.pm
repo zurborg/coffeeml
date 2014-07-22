@@ -354,7 +354,7 @@ sub _coffeescript {
 	if (keys %$assigns or length $self->{coffeescript} or scalar @{$self->{struct}->{coffee}}) {
 		$CS .= (
 			'window.jQuery ($) ->'.EOL.
-			_indent(join(EOL, map { sprintf q!%s = $('%s')!, $_, $assigns->{$_} } keys %$assigns), '  ').EOL.
+			_indent(join(EOL, map { sprintf q!%s = $ '%s'!, $_, $assigns->{$_} } keys %$assigns), '  ').EOL.
 			EOL.
 			_indent((join EOL, @{$self->{struct}->{coffee}}), '  ').EOL.
 			EOL.
