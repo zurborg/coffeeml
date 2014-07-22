@@ -301,6 +301,34 @@ sub _init {
 			}
 		}
 	);
+	$self->register_command('PHP',
+		parse => sub {
+			my ($self, $e, $args, $items) = @_;
+			return if defined $args;
+			$e->{text} = [ $self->_flatten([ @$items ], $e->{indent}) ];
+			@$items = ();
+		},
+		build => sub {
+			my ($self, $e, $args) = @_;
+			if (defined $args) {
+				if (exists $e->{items}) {
+					$e->{items} = [
+						{ indent => $e->{indent}, text => '<?php '.$args.' { ?>' },
+						@{$e->{items}},
+						{ indent => $e->{indent}, text => '<?php } ?>' }
+					];
+				} else {
+					if ($args =~ m{^=(.+)$}) {
+						$e->{text} = '<?php= '.$1.' ?>';
+					} else {
+						$e->{text} = '<?php '.$args.' ?>';
+					}
+				}
+			} else {
+				$e->{text} = join "\n", '<?php', @{$e->{text}}, '?>';
+			}
+		}
+	);
 	$self->register_command('loop',
 		parse => sub {
 			my ($self, $e, $args, $items) = @_;
